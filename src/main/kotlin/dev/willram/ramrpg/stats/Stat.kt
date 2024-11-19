@@ -10,7 +10,7 @@ enum class Stat(val displayName: String, val modifierName: String, val symbol: S
     STRENGTH( "Strength", "str_points", "❁", "<dark_red>", 0.0, 2.5),
     FORTUNE( "Fortune", "fortune_points", "♠", "<gold>", 0.0, 2.0),
     FEROCITY("Ferocity", "ferocity_points", "⫽", "<red>", 0.0, 0.0),
-    CRIT_CHANCE("Critical Chance", "critchance_points", "☣", "<dark_blue>", 15.0, 1.25),
+    CRIT_CHANCE("Critical Chance", "critchance_points", "☣", "<color:#0084ff>", 15.0, 1.25),
     CRIT_DAMAGE("Critical Damage", "critdamage_points", "❉", "<blue>", 50.0, 1.0),
     ATTACK_SPEED( "Attack Speed", "attackspeed_points", "♦", "<dark_aqua>", 0.0, 0.35),
     SPEED("Speed", "movespeed_points", "✦", "<white>", 0.0, 2.0),

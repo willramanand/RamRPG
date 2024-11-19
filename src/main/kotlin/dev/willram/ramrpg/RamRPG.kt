@@ -1,26 +1,34 @@
 package dev.willram.ramrpg
 
-import dev.willram.ramrpg.indicators.Indicators
 import dev.willram.ramcore.RamPlugin
 import dev.willram.ramcore.config.Configs
 import dev.willram.ramcore.configurate.hocon.HoconConfigurationLoader
+import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.menu.Gui
+import dev.willram.ramcore.metadata.Metadata
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.scheduler.Task
 import dev.willram.ramrpg.commands.SkillsRootCommand
 import dev.willram.ramrpg.config.RPGConfig
 import dev.willram.ramrpg.data.PlayerRepository
+import dev.willram.ramrpg.enchants.EnchantingSystem
+import dev.willram.ramrpg.enchants.Enchantments
 import dev.willram.ramrpg.entity.EntityListeners
+import dev.willram.ramrpg.indicators.Indicators
 import dev.willram.ramrpg.items.ItemListeners
 import dev.willram.ramrpg.levels.Leveler
 import dev.willram.ramrpg.skills.SkillListeners
 import dev.willram.ramrpg.skills.SkillRepository
 import dev.willram.ramrpg.source.SourceRegistry
 import dev.willram.ramrpg.source.Sources
+import dev.willram.ramrpg.stats.StatListeners
 import dev.willram.ramrpg.stats.StatRepository
 import dev.willram.ramrpg.ui.ActionBar
 import dev.willram.ramrpg.ui.BossBar
+import dev.willram.ramrpg.utils.BlockUtils
 import io.papermc.paper.command.brigadier.Commands
 import net.milkbowl.vault.economy.Economy
+import org.bukkit.event.block.BlockPlaceEvent
 import java.nio.file.Path
 
 
@@ -40,6 +48,8 @@ class RamRPG : RamPlugin() {
     lateinit var leveler: Leveler
     lateinit var actionBar: ActionBar
     lateinit var bossBar: BossBar
+
+    val GUI_ITEM_KEY = "ignore-gui-item"
 
     companion object {
         private lateinit var i: RamRPG;
@@ -79,10 +89,22 @@ class RamRPG : RamPlugin() {
         bossBar.load()
         sources.loadSources()
 
+        Enchantments.register()
+        EnchantingSystem.register()
+
         Indicators.register()
+
         SkillListeners.register()
+        StatListeners.register()
+
         EntityListeners.register()
+
         ItemListeners.register()
+
+        Events.subscribe(BlockPlaceEvent::class.java)
+            .handler { e ->
+                BlockUtils.setPlayerPlaced(e.block)
+            }
 
         this.autoSaveTask = Schedulers.async().runRepeating({ _: Task ->
             stats.saveAll()
@@ -101,6 +123,11 @@ class RamRPG : RamPlugin() {
         players.saveAll()
 
         actionBar.resetActionBars()
+
+        //close custom guis if open
+        for (entry in Metadata.players().getAllWithKey(Gui.OPEN_GUI_KEY)) {
+            entry.value.close()
+        }
     }
 
     override fun load() {

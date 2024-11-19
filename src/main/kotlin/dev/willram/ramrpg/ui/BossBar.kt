@@ -78,21 +78,19 @@ class BossBar(private val plugin: RamRPG) {
             bossBar.addViewer(player)
             // Add to maps
             bossBars[player]!![skill] = bossBar
-        } else {
-            val nameValue: Component;
-            if (!maxed) {
+        } else {;
+            val nameValue: Component = if (!maxed) {
                 if (plugin.conf.xpModifier > 1) {
-                    bossBar.name()
-                    nameValue = MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(${Formatter.decimalFormat(currentXp, 1)}/${Formatter.bigNumber(
+                    MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(${Formatter.decimalFormat(currentXp, 1)}/${Formatter.bigNumber(
                         levelXp.toLong()
                     )} XP) <gold>${plugin.conf.xpModifier}x")
                 } else {
-                    nameValue = MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(${Formatter.decimalFormat(currentXp, 1)}/${Formatter.bigNumber(
+                    MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(${Formatter.decimalFormat(currentXp, 1)}/${Formatter.bigNumber(
                         levelXp.toLong()
                     )} XP)")
                 }
             } else {
-                nameValue = MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(MAXED)")
+                MiniMessage.miniMessage().deserialize("<gold>${plugin.skills[skill].displayName} $level <gray>(MAXED)")
             }
             bossBar.name(nameValue)
             var progress = 0f

@@ -14,19 +14,12 @@ import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.events.ManaRegenerateEvent
 import dev.willram.ramrpg.events.SkillLevelUpEvent
 import dev.willram.ramrpg.stats.Stat
-import org.bukkit.Bukkit
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
 import org.bukkit.event.EventPriority
 import org.bukkit.event.entity.EntityRegainHealthEvent
-import org.bukkit.event.player.PlayerChangedMainHandEvent
-import org.bukkit.event.player.PlayerChangedWorldEvent
-import org.bukkit.event.player.PlayerItemBreakEvent
-import org.bukkit.event.player.PlayerJoinEvent
-import org.bukkit.event.player.PlayerLoginEvent
-import org.bukkit.event.player.PlayerQuitEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.event.player.*
 import java.nio.file.Path
 import java.util.*
 

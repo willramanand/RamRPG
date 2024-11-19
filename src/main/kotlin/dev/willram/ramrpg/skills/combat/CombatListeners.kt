@@ -2,10 +2,8 @@ package dev.willram.ramrpg.skills.combat
 
 import dev.willram.ramcore.event.Events
 import dev.willram.ramrpg.RamRPG
-import dev.willram.ramrpg.enums.EntityStats
 import dev.willram.ramrpg.skills.Skill
 import dev.willram.ramrpg.source.combat.CombatSource
-import dev.willram.ramrpg.stats.Stat
 import org.bukkit.entity.Boss
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
@@ -65,39 +63,6 @@ class CombatListeners {
                     }
                 }
 
-            Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.LOWEST)
-                .handler { e ->
-                    if (e.isCancelled) return@handler
-                    val damager: LivingEntity = if (e.damager is LivingEntity) {
-                        e.damager as LivingEntity
-                    } else if (e.damager is Projectile && (e.damager as Projectile).shooter is LivingEntity) {
-                        (e.damager as Projectile).shooter as LivingEntity
-                    } else return@handler
-
-                    if (e.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK
-                        && e.cause != EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK
-                        && e.cause != EntityDamageEvent.DamageCause.PROJECTILE) return@handler
-
-
-                    val totalDamage: Double
-                    if (damager is Player) {
-                        val data = RamRPG.get().players[damager.uniqueId]!!
-                        val baseDamage = (1 + data.statPoints[Stat.DAMAGE]!!)
-                        val strengthMultiplier = (1 + (data.statPoints[Stat.STRENGTH]!! / 100.0))
-                        val currentAttackPower = damager.getCooledAttackStrength(0.0f)
-
-
-                        totalDamage = baseDamage * strengthMultiplier * currentAttackPower
-                    } else {
-                        totalDamage = try {
-                            EntityStats.valueOf(damager.type.toString()).damage
-                        } catch (e: Exception) {
-                            2.0
-                        }
-                    }
-
-                    e.damage = totalDamage
-                }
         }
     }
 

@@ -1,7 +1,6 @@
 package dev.willram.ramrpg.entity
 
 import dev.willram.ramcore.event.Events
-import dev.willram.ramrpg.enums.EntityStats
 import org.bukkit.attribute.Attribute
 import org.bukkit.event.EventPriority
 import org.bukkit.event.entity.CreatureSpawnEvent

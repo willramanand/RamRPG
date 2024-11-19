@@ -11,6 +11,8 @@ import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.protocol.Protocol
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.utils.Formatter
+import dev.willram.ramrpg.enums.CriticalType
+import dev.willram.ramrpg.events.CriticalStrikeEvent
 import io.papermc.paper.event.entity.EntityMoveEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
@@ -21,6 +23,7 @@ import org.bukkit.entity.*
 import org.bukkit.event.EventPriority
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityRegainHealthEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import java.util.*
 
@@ -28,6 +31,8 @@ import java.util.*
 class Indicators private constructor() {
 
     companion object {
+        private val critMap: MutableMap<UUID, CriticalType> = mutableMapOf()
+
         fun register() {
             Protocol.subscribe(Play.Server.ENTITY_METADATA)
                 .handler { e ->
@@ -74,26 +79,64 @@ class Indicators private constructor() {
                 e.entity.isCustomNameVisible = true
             }
 
-            Events.subscribe(EntityDamageEvent::class.java, EventPriority.MONITOR).handler { e ->
-                if (e.isCancelled) return@handler
-                if (e.entity.type == EntityType.ITEM) return@handler
-                if (!checkVisible(e.entity)) return@handler
-
-                if (e.cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK || e.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION || e.cause == EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK || e.cause == EntityDamageEvent.DamageCause.PROJECTILE) return@handler
+            Events.subscribe(EntityDamageEvent::class.java, EventPriority.MONITOR)
+                .filter { e -> !e.isCancelled }
+                .filter { e -> e.entity.type != EntityType.ITEM }
+                .filter { e -> checkVisible(e.entity) }
+                .filter { e ->
+                    e.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK
+                            && e.cause != EntityDamageEvent.DamageCause.ENTITY_EXPLOSION
+                            && e.cause != EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK
+                            && e.cause != EntityDamageEvent.DamageCause.PROJECTILE
+                }
+                .handler { e ->
                 val location = e.entity.location
                 val damage = e.damage
                 location.y += e.entity.height
                 spawnIndicator(e.entity as LivingEntity, location, damage)
             }
 
-            Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.MONITOR).handler { e ->
-                if (e.isCancelled) return@handler
-                if (!checkVisible(e.entity)) return@handler
+            Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.MONITOR)
+                .filter { e -> !e.isCancelled }
+                .filter { e -> e.entity.type != EntityType.ITEM }
+                .filter { e -> checkVisible(e.entity) }
+                .handler { e ->
                 val location = e.entity.location
                 val damage = e.damage
                 location.y += e.entity.height
-                spawnIndicator(e.entity as LivingEntity, location, damage)
+
+                var criticalType = CriticalType.NONE
+                if (e.damager is Player) {
+                    val player = e.damager as Player
+                    if (critMap.containsKey(player.uniqueId)) {
+                        criticalType = critMap[player.uniqueId]!!
+                        critMap.remove(player.uniqueId)
+                    }
+                } else if (e.damager is Projectile) {
+                    val projectile = e.damager as Projectile
+                    if (projectile.shooter is Player) {
+                        val player = projectile.shooter as Player
+                        if (critMap.containsKey(player.uniqueId)) {
+                            criticalType = critMap[player.uniqueId]!!
+                            critMap.remove(player.uniqueId)
+                        }
+                    }
+                }
+
+                spawnIndicator(e.entity as LivingEntity, location, damage, criticalType.color)
             }
+
+            Events.subscribe(EntityRegainHealthEvent::class.java, EventPriority.LOWEST)
+                .filter { e -> !e.isCancelled }
+                .filter { e -> e.entity is LivingEntity }
+                .handler { e ->
+                    spawnIndicator(e.entity as LivingEntity, e.entity.location, e.amount, "<green>")
+                }
+
+            Events.subscribe(CriticalStrikeEvent::class.java, EventPriority.LOWEST)
+                .handler { e ->
+                    critMap[e.player.uniqueId] = e.type
+                }
         }
 
         private fun validEntity(entity: LivingEntity): Boolean {
@@ -153,7 +196,7 @@ class Indicators private constructor() {
             return isVisible
         }
 
-        private fun spawnIndicator(entity: LivingEntity, location: Location, damage: Double) {
+        private fun spawnIndicator(entity: LivingEntity, location: Location, damage: Double, color: String = CriticalType.NONE.color) {
             location.x += Random().nextDouble(-0.5, 0.5)
             location.z += Random().nextDouble(-0.5, 0.5)
             location.y += Random().nextDouble(-0.25, 0.25)
@@ -180,7 +223,7 @@ class Indicators private constructor() {
             metadataPacket.integers.write(0, entityId)
 
             // metadata packet
-            val damageComponent = MiniMessage.miniMessage().deserialize("<red>${Formatter.decimalFormat(damage, 1)}</red>")
+            val damageComponent = MiniMessage.miniMessage().deserialize("${color}${Formatter.decimalFormat(damage, 1)}")
             val watcher = WrappedDataWatcher()
             val alignment = WrappedDataWatcherObject(15, WrappedDataWatcher.Registry.get(java.lang.Byte::class.java))
             val text = WrappedDataWatcherObject(23, WrappedDataWatcher.Registry.getChatComponentSerializer(false))
@@ -206,14 +249,6 @@ class Indicators private constructor() {
                     Protocol.sendPacket(player, destroyPacket)
                 }
             }, 30L)
-
-//            val display = location.world.spawn(location, TextDisplay::class.java) { display ->
-//                display.text(MiniMessage.miniMessage().deserialize("<red>${Formatter.decimalFormat(damage, 1)}</red>"));
-//                display.billboard = Display.Billboard.CENTER;
-//            }
-//            Schedulers.sync().runLater({
-//                display.remove()
-//            }, 30L)
         }
 
         private fun writeWatchableObjects(dataWatcher: WrappedDataWatcher): MutableList<WrappedDataValue> {

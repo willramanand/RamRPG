@@ -4,6 +4,7 @@ import dev.willram.ramcore.event.Events
 import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.skills.Skill
 import dev.willram.ramrpg.source.mining.MiningSource
+import dev.willram.ramrpg.utils.BlockUtils
 import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.enchantments.Enchantment
@@ -18,9 +19,10 @@ class MiningListeners {
 
         fun register() {
             Events.subscribe(BlockBreakEvent::class.java)
+                .filter { e -> !e.isCancelled }
+                .filter { e -> !BlockUtils.isPlayerPlaced(e.block) }
+                .filter { e -> validMats.contains(e.block.type) }
                 .handler { e ->
-                    if (e.isCancelled) return@handler
-                    if (!(validMats.contains(e.block.type))) return@handler
                     //if (BlockUtils.isPlayerPlaced(event.getBlock())) return
                     val player: Player = e.player
                     //if (blockXpGainPlayer(player)) return
