@@ -37,6 +37,7 @@ class RamRPG : RamPlugin() {
     private lateinit var autoSaveTask: Task;
 
     var vaultEnabled = false
+    var mythicMobsEnabled = false
     var econ: Economy? = null
 
     lateinit var conf: RPGConfig
@@ -48,8 +49,6 @@ class RamRPG : RamPlugin() {
     lateinit var leveler: Leveler
     lateinit var actionBar: ActionBar
     lateinit var bossBar: BossBar
-
-    val GUI_ITEM_KEY = "ignore-gui-item"
 
     companion object {
         private lateinit var i: RamRPG;
@@ -132,6 +131,7 @@ class RamRPG : RamPlugin() {
 
     override fun load() {
         checkVault()
+        checkMythicMobs()
     }
 
     @Suppress("UnstableApiUsage")
@@ -163,6 +163,12 @@ class RamRPG : RamPlugin() {
         if (server.pluginManager.getPlugin("Vault") == null) return
         vaultEnabled = true
         this.log("<yellow>Vault found: <green>INTEGRATION ENABLED")
+    }
+
+    private fun checkMythicMobs() {
+        if (server.pluginManager.getPlugin("MythicMobs") == null) return
+        mythicMobsEnabled = true
+        this.log("<yellow>MythicMobs found: <green>INTEGRATION ENABLED")
     }
 
     private fun setupEconony() {

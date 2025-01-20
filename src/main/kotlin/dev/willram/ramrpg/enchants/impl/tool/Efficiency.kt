@@ -2,6 +2,7 @@ package dev.willram.ramrpg.enchants.impl.tool
 
 import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
@@ -12,6 +13,7 @@ class Efficiency : CustomEnchantment("ram-efficiency", "Efficiency", 1, 5), Exte
     }
 
     override fun allowed(item: ItemStack): Boolean {
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
         return Tag.ITEMS_ENCHANTABLE_MINING.isTagged(item.type)
     }
 
@@ -27,6 +29,10 @@ class Efficiency : CustomEnchantment("ram-efficiency", "Efficiency", 1, 5), Exte
 
     override fun vanilla(): Enchantment {
         return Enchantment.EFFICIENCY
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 0
     }
 
     override fun shouldAddVanilla(): Boolean {

@@ -16,7 +16,7 @@ abstract class CustomEnchantment(val key: String, val baseName: String, val star
     abstract fun allowed(item: ItemStack): Boolean
     abstract fun conflicts(enchantment: CustomEnchantment): Boolean
     abstract fun xpCosts(lvl: Int, item: ItemStack): Int
-
+    abstract fun requiredBookshelfPower(): Int
     open fun handleStats(lvl: Int): Int {
         return 0
     }

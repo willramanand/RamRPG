@@ -81,7 +81,7 @@ class Indicators private constructor() {
 
             Events.subscribe(EntityDamageEvent::class.java, EventPriority.MONITOR)
                 .filter { e -> !e.isCancelled }
-                .filter { e -> e.entity.type != EntityType.ITEM }
+                .filter { e -> e.entity is LivingEntity }
                 .filter { e -> checkVisible(e.entity) }
                 .filter { e ->
                     e.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK
@@ -98,7 +98,7 @@ class Indicators private constructor() {
 
             Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.MONITOR)
                 .filter { e -> !e.isCancelled }
-                .filter { e -> e.entity.type != EntityType.ITEM }
+                .filter { e -> e.entity is LivingEntity }
                 .filter { e -> checkVisible(e.entity) }
                 .handler { e ->
                 val location = e.entity.location

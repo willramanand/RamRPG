@@ -2,6 +2,7 @@ package dev.willram.ramrpg.enchants.impl.tool
 
 import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
@@ -12,6 +13,7 @@ class SilkTouch : CustomEnchantment("ram-silk-touch", "Silk Touch", 1, 1), Exten
     }
 
     override fun allowed(item: ItemStack): Boolean {
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
         return Tag.ITEMS_ENCHANTABLE_MINING.isTagged(item.type)
     }
 
@@ -25,6 +27,10 @@ class SilkTouch : CustomEnchantment("ram-silk-touch", "Silk Touch", 1, 1), Exten
 
     override fun vanilla(): Enchantment {
         return Enchantment.SILK_TOUCH
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 15
     }
 
     override fun shouldAddVanilla(): Boolean {

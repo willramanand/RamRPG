@@ -5,6 +5,7 @@ import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
 import dev.willram.ramrpg.stats.Stat
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
@@ -26,11 +27,16 @@ class Mending : CustomEnchantment("ram-mending", "Mending", 1, 3), ExtendedVanil
     }
 
     override fun allowed(item: ItemStack): Boolean {
-        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type)
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
+        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type) || item.type == Material.ELYTRA
     }
 
     override fun conflicts(enchantment: CustomEnchantment): Boolean {
         return false
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 15
     }
 
     override fun xpCosts(lvl: Int, item: ItemStack): Int {

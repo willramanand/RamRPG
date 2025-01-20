@@ -1,6 +1,7 @@
 package dev.willram.ramrpg.enchants.impl.weapon
 
 import dev.willram.ramrpg.enchants.CustomEnchantment
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.inventory.ItemStack
 
@@ -18,11 +19,16 @@ class Lifesteal : CustomEnchantment("ram-lifesteal", "Lifesteal", 1, 5) {
     }
 
     override fun allowed(item: ItemStack): Boolean {
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
         return Tag.ITEMS_ENCHANTABLE_SHARP_WEAPON.isTagged(item.type)
     }
 
     override fun conflicts(enchantment: CustomEnchantment): Boolean {
         return false
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 27
     }
 
     override fun xpCosts(lvl: Int, item: ItemStack): Int {

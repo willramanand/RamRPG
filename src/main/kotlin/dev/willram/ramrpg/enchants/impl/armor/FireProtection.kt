@@ -6,6 +6,7 @@ import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.Enchantments
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
 import dev.willram.ramrpg.stats.Stat
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
@@ -27,7 +28,12 @@ class FireProtection : CustomEnchantment("ram-fire-protection", "Fire Protection
     }
 
     override fun allowed(item: ItemStack): Boolean {
-        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type)
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
+        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type) || item.type == Material.ELYTRA
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 3
     }
 
     override fun conflicts(enchantment: CustomEnchantment): Boolean {

@@ -32,7 +32,6 @@ class CombatListeners {
                         && e.cause != EntityDamageEvent.DamageCause.PROJECTILE) return@handler
 
                     if (e.entity !is LivingEntity) return@handler
-                    val type = e.entityType
                     if (e.entity == player) return@handler
                     val health = (e.entity as LivingEntity).health
                     var damage = 1.0.coerceAtMost((e.finalDamage / health))
@@ -40,7 +39,7 @@ class CombatListeners {
                         damage = 0.01.coerceAtMost((e.finalDamage / health) / 100)
                     }
                     if (e.finalDamage > health) return@handler
-                    RamRPG.get().leveler.addXp(player, Skill.COMBAT, damage * RamRPG.get().sources.getXp(CombatSource.valueOf(type.toString())))
+                    RamRPG.get().leveler.addXp(player, Skill.COMBAT, damage * RamRPG.get().sources.getXp(CombatSource.retrieve(e.entity as LivingEntity)))
                 }
 
             Events.subscribe(EntityDeathEvent::class.java, EventPriority.HIGHEST)
@@ -50,16 +49,14 @@ class CombatListeners {
                     if (e.lastDamageCause !is EntityDamageByEntityEvent) return@handler
                     if ((e.lastDamageCause as EntityDamageByEntityEvent).damager is Player) {
                         val p = (e.lastDamageCause as EntityDamageByEntityEvent).damager as Player
-                        val type = e.type
                         if (e == p) return@handler
-                        RamRPG.get().leveler.addXp(p, Skill.COMBAT, RamRPG.get().sources.getXp(CombatSource.valueOf(type.toString())))
+                        RamRPG.get().leveler.addXp(p, Skill.COMBAT, RamRPG.get().sources.getXp(CombatSource.retrieve(e)))
                     } else if ((e.lastDamageCause as EntityDamageByEntityEvent).damager is Projectile) {
                         val projectile = (e.lastDamageCause as EntityDamageByEntityEvent).damager as Projectile
-                        val type = e.type
                         if (projectile.shooter !is Player) return@handler
                         val p = projectile.shooter as Player
                         if (e == p) return@handler
-                        RamRPG.get().leveler.addXp(p, Skill.COMBAT, RamRPG.get().sources.getXp(CombatSource.valueOf(type.toString())))
+                        RamRPG.get().leveler.addXp(p, Skill.COMBAT, RamRPG.get().sources.getXp(CombatSource.retrieve(e)))
                     }
                 }
 

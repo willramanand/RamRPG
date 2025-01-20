@@ -32,7 +32,8 @@ class FishingListeners {
             Material.DIAMOND_BLOCK,
             Material.LAPIS_BLOCK,
             Material.NETHERITE_INGOT,
-            Material.NETHERITE_BLOCK
+            Material.NETHERITE_BLOCK,
+            Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE
         )
 
 

@@ -2,6 +2,7 @@ package dev.willram.ramrpg.enchants.impl.rod
 
 import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
@@ -13,6 +14,7 @@ class Lure : CustomEnchantment("ram-lure", "Lure", 1, 3), ExtendedVanillaEnchant
     }
 
     override fun allowed(item: ItemStack): Boolean {
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
         return Tag.ITEMS_ENCHANTABLE_FISHING.isTagged(item.type)
     }
 
@@ -24,6 +26,10 @@ class Lure : CustomEnchantment("ram-lure", "Lure", 1, 3), ExtendedVanillaEnchant
         val base = 10
         val mult = 5
         return base + (mult * (lvl - 1))
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 8
     }
 
     override fun vanilla(): Enchantment {

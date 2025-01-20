@@ -96,7 +96,7 @@ class StatRepository(private val plugin: RamRPG) : DataRepository<Stat, LoadedSt
                 var statAdded = 0.0
                 for (item in equippedItems) {
                     if (item == null) continue
-                    val itemStats = Items.retrieve(item.type.name)
+                    val itemStats = Items.retrieve(item)
                     statAdded += itemStats?.stats?.get(stat) ?: 0.0
                 }
                 val currentValue = newStatMap.getOrDefault(stat, 0.0)

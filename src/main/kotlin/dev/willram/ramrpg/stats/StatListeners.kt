@@ -7,7 +7,9 @@ import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.enchants.Enchantments
 import dev.willram.ramrpg.entity.EntityStats
 import dev.willram.ramrpg.enums.CriticalType
+import dev.willram.ramrpg.events.AbilityFortuneEvent
 import dev.willram.ramrpg.events.CriticalStrikeEvent
+import dev.willram.ramrpg.utils.BlockUtils
 import org.bukkit.Material
 import org.bukkit.entity.Damageable
 import org.bukkit.entity.LivingEntity
@@ -103,7 +105,7 @@ class StatListeners {
             // Base Damage, Strength, Critical Chance/Damage, Ferocity
             Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.LOWEST)
                 .filter { e -> !e.isCancelled }
-                .filter { e -> e.cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK || e.cause == EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK || e.cause == EntityDamageEvent.DamageCause.PROJECTILE }
+                .filter { e -> e.cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK || e.cause == EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK || e.cause == EntityDamageEvent.DamageCause.PROJECTILE || e.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION }
                 .handler { e ->
                     val damager: LivingEntity = if (e.damager is LivingEntity) {
                         e.damager as LivingEntity
@@ -121,6 +123,12 @@ class StatListeners {
                         if (mainHand != null && mainHand.hasItemMeta()) {
                             if (Enchantments.hasEnchant(mainHand, Enchantments.SHARPNESS)) {
                                 val lvl = Enchantments.getEnchantmentLevel(mainHand, Enchantments.SHARPNESS)
+                                val multiplier = 1.0 + ((10.0 * lvl) / 100.0)
+                                baseDamage *= multiplier
+                            }
+
+                            if (Enchantments.hasEnchant(mainHand, Enchantments.POWER)) {
+                                val lvl = Enchantments.getEnchantmentLevel(mainHand, Enchantments.POWER)
                                 val multiplier = 1.0 + ((10.0 * lvl) / 100.0)
                                 baseDamage *= multiplier
                             }
@@ -153,7 +161,7 @@ class StatListeners {
                         totalDamage = if (criticalType == CriticalType.NONE) {
                             baseDamage * strengthMultiplier
                         } else {
-                            val event = CriticalStrikeEvent(e.damager as Player, criticalType)
+                            val event = CriticalStrikeEvent(damager, criticalType)
                             Events.call(event)
                             baseDamage * strengthMultiplier * critDamage
                         }
@@ -174,25 +182,25 @@ class StatListeners {
                             if (ferocityActivated) {
                                 regen *= 2
                             }
-                            val event = EntityRegainHealthEvent(e.damager, regen, EntityRegainHealthEvent.RegainReason.CUSTOM)
+                            val event = EntityRegainHealthEvent(damager, regen, EntityRegainHealthEvent.RegainReason.CUSTOM)
                             Events.call(event)
                             if (!event.isCancelled) {
-                                (e.damager as LivingEntity).heal(regen)
+                                damager.heal(regen)
                             }
                         }
                     } else {
                         totalDamage = try {
-                            EntityStats.valueOf(damager.type.toString()).damage
+                            EntityStats.retrieve(damager).damage
+
                         } catch (e: Exception) {
                             2.0
                         }
                     }
-
                     e.damage = totalDamage
                 }
 
             // Defense Listener
-            Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.HIGH)
+            Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.HIGHEST)
                 .filter { e -> !e.isCancelled }
                 .filter { e -> e.entity is LivingEntity }
                 .handler { e ->
@@ -234,7 +242,7 @@ class StatListeners {
 
                     } else {
                         defense = try {
-                            EntityStats.valueOf(e.entity.type.toString()).defense
+                            EntityStats.retrieve(e.entity as LivingEntity).defense
                         } catch (e: Exception) {
                             0.0
                         }
@@ -298,7 +306,7 @@ class StatListeners {
                         return@handler
                     }
 
-                    //if (BlockUtils.isPlayerPlaced(event.getBlock())) return
+                    if (BlockUtils.isPlayerPlaced(e.block)) return@handler
 
                     val fortuneAdd: Int = fortuneCalc(e.player)
 
@@ -306,6 +314,22 @@ class StatListeners {
                     newItem.amount = fortuneAdd
                     if (dropMat == Material.AIR || newItem.amount == 0) return@handler
                     e.player.world.dropItem(e.block.location, newItem)
+                }
+
+            Events.subscribe(AbilityFortuneEvent::class.java)
+                .handler { e ->
+                    var dropMat = e.type
+                    if (convertMats.contains(dropMat)) {
+                        dropMat = convertOre(e.type, e.player)
+                    } else if (!(nonConvertMats.contains(e.type))) {
+                        return@handler
+                    }
+                    val fortuneAdd: Int = fortuneCalc(e.player)
+
+                    val newItem = ItemStack(dropMat)
+                    newItem.amount = (e.blocksBroken - 1) * fortuneAdd
+                    if (dropMat == Material.AIR || newItem.amount == 0) return@handler
+                    e.player.world.dropItem(e.location, newItem)
                 }
         }
 

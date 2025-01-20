@@ -3,6 +3,7 @@ package dev.willram.ramrpg.items
 import com.comphenix.protocol.PacketType
 import dev.willram.ramcore.data.NamespacedKeys
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.menu.Gui
 import dev.willram.ramcore.pdc.PDCs
 import dev.willram.ramcore.protocol.Protocol
 import dev.willram.ramrpg.RamRPG
@@ -60,52 +61,16 @@ class ItemListeners {
                 .handler { e ->
                     e.isCancelled = true
                 }
-
-//            Events.subscribe(PrepareItemCraftEvent::class.java)
-//                .handler { e ->
-//                    val item = e.inventory.result
-//                    if (item == null) return@handler
-//                    if (item.hasItemMeta()) return@handler
-//                    item.itemMeta = Bukkit.getItemFactory().getItemMeta(item.type)
-//                }
-//
-//            Events.subscribe(CraftItemEvent::class.java)
-//                .handler { e ->
-//                    if (e.isCancelled) return@handler
-//                    val item = e.currentItem
-//                    if (item == null) return@handler
-//                    if (item.hasItemMeta()) return@handler
-//                    item.itemMeta = Bukkit.getItemFactory().getItemMeta(item.type)
-//                }
-//
-//            Events.subscribe(EntityPickupItemEvent::class.java)
-//                .handler { e ->
-//                    if (e.isCancelled) return@handler
-//                    val item = e.item.itemStack
-//                    if (item == null) return@handler
-//                    if (item.hasItemMeta()) return@handler
-//                    item.itemMeta = Bukkit.getItemFactory().getItemMeta(item.type)
-//                }
-//
-//            Events.subscribe(InventoryClickEvent::class.java)
-//                .handler { e ->
-//                    if (e.isCancelled) return@handler
-//                    val item = e.currentItem
-//                    if (item == null) return@handler
-//                    if (item.hasItemMeta()) return@handler
-//                    item.itemMeta = Bukkit.getItemFactory().getItemMeta(item.type)
-//                }
         }
 
         private fun applyModifications(item: ItemStack?, player: Player): ItemStack? {
             if (item == null) return item
-            if (item.hasItemMeta() && PDCs.has(item.itemMeta, RamRPG.get().GUI_ITEM_KEY)) return item
-            val itemInfo = Items.retrieve(item.type.name) ?: return item
+            if (item.hasItemMeta() && PDCs.has(item.itemMeta, Gui.GUI_ITEM_KEY)) return item
+            val itemInfo = Items.retrieve(item) ?: return item
             val newItem = item.clone()
             val meta = newItem.itemMeta
 
             val newLore: MutableList<Component> = ArrayList()
-            val oldLore = meta.lore()
 
             for (stat in itemInfo.stats.keys) {
                 val actualStat = RamRPG.get().stats[stat]
@@ -113,8 +78,18 @@ class ItemListeners {
                     .decoration(TextDecoration.ITALIC, false))
             }
 
-            newLore.add(Component.text(""))
+            if (PDCs.has(meta, "ramrpg-lore")) {
+                val loreStrings = PDCs.get(meta, "ramrpg-lore", PersistentDataType.LIST.strings())
+                if (loreStrings != null) {
+                    newLore.add(Component.text(""))
+                    for (lore in loreStrings) {
+                        newLore.add(MiniMessage.miniMessage().deserialize(lore).decoration(TextDecoration.ITALIC, false))
+                    }
+                }
+            }
 
+            newLore.add(Component.text(""))
+            //meta.removeEnchantments()
             val itemEnchants = Enchantments.getEnchants(item)
             for (enchantEntry in itemEnchants) {
                 newLore.add(MiniMessage.miniMessage().deserialize("<blue>${enchantEntry.key.displayName(enchantEntry.value)}").decoration(TextDecoration.ITALIC, false))
@@ -123,18 +98,11 @@ class ItemListeners {
                 }
             }
 
-            meta.removeEnchantments()
-
             if (itemEnchants.isNotEmpty()) {
                 meta.setEnchantmentGlintOverride(true)
             } else {
                 meta.setEnchantmentGlintOverride(false)
             }
-//
-//            if (oldLore != null && oldLore.isNotEmpty()) {
-//                newLore.add(Component.text(""))
-//                newLore.addAll(oldLore)
-//            }
 
             newLore.add(Component.text(""))
 

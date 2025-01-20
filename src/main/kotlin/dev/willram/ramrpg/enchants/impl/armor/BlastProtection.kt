@@ -4,6 +4,7 @@ import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.enchants.CustomEnchantment
 import dev.willram.ramrpg.enchants.ExtendedVanillaEnchantment
 import dev.willram.ramrpg.stats.Stat
+import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
@@ -23,7 +24,8 @@ class BlastProtection : CustomEnchantment("ram-blast-protection", "Blast Protect
     }
 
     override fun allowed(item: ItemStack): Boolean {
-        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type)
+        //if (item.type == Material.BOOK || item.type == Material.ENCHANTED_BOOK) return true
+        return Tag.ITEMS_ENCHANTABLE_ARMOR.isTagged(item.type) || item.type == Material.ELYTRA
     }
 
     override fun conflicts(enchantment: CustomEnchantment): Boolean {
@@ -34,6 +36,10 @@ class BlastProtection : CustomEnchantment("ram-blast-protection", "Blast Protect
         val base = 10
         val mult = 5
         return base + (mult * (lvl - 1))
+    }
+
+    override fun requiredBookshelfPower(): Int {
+        return 0
     }
 
     override fun vanilla(): Enchantment {

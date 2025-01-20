@@ -4,8 +4,10 @@ import com.destroystokyo.paper.profile.PlayerProfile
 import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.item.ItemStackBuilder
 import dev.willram.ramcore.menu.Gui
+import dev.willram.ramcore.menu.Item
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.scheduler.Task
+import dev.willram.ramrpg.RamRPG
 import dev.willram.ramrpg.events.CustomEnchantEvent
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -19,6 +21,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.profile.PlayerTextures
+import org.bukkit.util.Vector
 import java.net.MalformedURLException
 import java.net.URI
 import java.net.URL
@@ -32,6 +35,42 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
     private val BACK_SLOT = 45
     private var inputItem: ItemStack? = null;
     private var tickingTask: Task;
+
+    private val bookshelfVectors = listOf<Vector>(
+        Vector(2, 0, -2),
+        Vector(2, 1, -2),
+        Vector(2, 0, 2),
+        Vector(2, 1, 2),
+        Vector(-2, 0, -2),
+        Vector(-2, 1, -2),
+        Vector(-2, 0, 2),
+        Vector(-2, 1, 2),
+        Vector(1, 0, -2),
+        Vector(0, 0, -2),
+        Vector(-1, 0, -2),
+        Vector(1, 1, -2),
+        Vector(0, 1, -2),
+        Vector(-1, 1, -2),
+        Vector(1, 0, 2),
+        Vector(0, 0, 2),
+        Vector(-1, 0, 2),
+        Vector(1, 1, 2),
+        Vector(0, 1, 2),
+        Vector(-1, 1, 2),
+        Vector(2, 0, -1),
+        Vector(2, 0, 0),
+        Vector(2, 0, 1),
+        Vector(2, 1, -1),
+        Vector(2, 1, 0),
+        Vector(2, 1, 1),
+        Vector(-2, 0, -1),
+        Vector(-2, 0, 0),
+        Vector(-2, 0, 1),
+        Vector(-2, 1, -1),
+        Vector(-2, 1, 0),
+        Vector(-2, 1, 1)
+    )
+    private var bookshelfPower = 0
 
     init {
         tickingTask = Schedulers.async().runRepeating({ _ ->
@@ -48,6 +87,15 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
                 }
             }
         }, 0L, 1L)
+
+        bookshelfPower = 0
+        for (vec in bookshelfVectors) {
+            if (bookshelfPower >= 30 ) break
+            val tableLocation = table.location
+            val currentBlock = tableLocation.add(vec)
+            if (currentBlock == null || currentBlock.block.type != Material.BOOKSHELF) continue
+            bookshelfPower++
+        }
     }
 
     override fun redraw() {
@@ -74,7 +122,7 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
                 MiniMessage.miniMessage().deserialize("<grey>can be increased by"),
                 MiniMessage.miniMessage().deserialize("<grey>placing bookshelves nearby."),
                 MiniMessage.miniMessage().deserialize(""),
-                MiniMessage.miniMessage().deserialize("<grey>Current Bookshelf Power: <light_purple>0")
+                MiniMessage.miniMessage().deserialize("<grey>Current Bookshelf Power: <light_purple>${bookshelfPower}")
             )
             .build {}
         this.setItem(48, bookPower)
@@ -88,7 +136,11 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
                 MiniMessage.miniMessage().deserialize("<grey>View a complete list of all"),
                 MiniMessage.miniMessage().deserialize("<grey>enchantments and their requirements.")
             )
-            .build {}
+            .build {
+                this.player.closeInventory()
+                val guideGui = EnchantmentGuideGui(this.player)
+                guideGui.open()
+            }
 
         this.setItem(50, enchantGuide)
     }
@@ -128,6 +180,7 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
             val hasEnchant = if (Enchantments.hasEnchant(item, enchant.key)) "<green><b>✔" else "<red><b>✖"
             val enchantLvl = if (Enchantments.hasEnchant(item, enchant.key)) currentEnchantments[enchant.key] else null
             val hasConflicts = if (!enchant.value) "<green><b>✔" else "<red><b>✖"
+            val hasBookshelfPower = if (this.bookshelfPower >= enchant.key.requiredBookshelfPower()) "<yellow>Click to view!" else "<red><b>Bookshelf Power required: ${enchant.key.requiredBookshelfPower()}"
             val slot = ENCHANTMENTS_SLOTS[count]
             val lore: MutableList<Component> = ArrayList()
             for (line in enchant.key.description(null)) {
@@ -139,7 +192,7 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
                     MiniMessage.miniMessage().deserialize("<grey>${enchant.key.displayName(enchantLvl)}: $hasEnchant"),
                     MiniMessage.miniMessage().deserialize("<grey>Applicable: $hasConflicts"),
                     MiniMessage.miniMessage().deserialize(""),
-                    MiniMessage.miniMessage().deserialize("<yellow>Click to view!")
+                    MiniMessage.miniMessage().deserialize(hasBookshelfPower)
                 )
             )
             val book = ItemStackBuilder.of(Material.ENCHANTED_BOOK)
@@ -150,7 +203,7 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
                     lore
                 )
                 .build(ClickType.LEFT) {
-                    if(!enchant.value) handleEnchantmentLevels(enchant.key)
+                    if(!enchant.value && this.bookshelfPower >= enchant.key.requiredBookshelfPower()) handleEnchantmentLevels(enchant.key)
                 }
             this.setItem(slot, book)
             count++
@@ -239,8 +292,15 @@ class EnchantingGui(player: Player, val table: Block) : Gui(player, 6, "Enchant 
 
     private fun handleEnchanting(enchantment: CustomEnchantment, lvl: Int, xpCost: Int) {
         if (handle.getItem(INPUT_SLOT) != null) {
-            val item = handle.getItem(INPUT_SLOT)
-            if (item != null) {
+            val currentItem = handle.getItem(INPUT_SLOT)
+            if (currentItem != null) {
+                val item: ItemStack
+                if (currentItem.type != Material.BOOK) {
+                    item = currentItem
+                } else {
+                    handle.setItem(INPUT_SLOT, ItemStackBuilder.of(Material.ENCHANTED_BOOK).build())
+                    item = handle.getItem(INPUT_SLOT)!!
+                }
                 val event = CustomEnchantEvent(player, table, item, enchantment, lvl)
                 Events.call(event)
                 if (!event.isCancelled) {

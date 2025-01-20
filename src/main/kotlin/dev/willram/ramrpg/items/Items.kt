@@ -1,11 +1,17 @@
 package dev.willram.ramrpg.items
 
 import dev.willram.ramcore.data.NamespacedKeys
+import dev.willram.ramcore.pdc.PDCs
 import dev.willram.ramrpg.stats.Stat
 import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 
 enum class Items(val key: String, val displayName: String, val stats: Map<Stat, Double>, val rarity: ItemRarity) {
 
+    ENCHANTED_BOOK              ("enchanted_book", "Enchanted Book", mapOf(), ItemRarity.UNCOMMON),
+
+    TRIDENT                     ("trident", "Trident", mapOf(Stat.DAMAGE to 10.0), ItemRarity.RARE),
     CROSSBOW                    ("crossbow", "Crossbow", mapOf(Stat.DAMAGE to 9.0), ItemRarity.COMMON),
     BOW                         ("bow", "Bow", mapOf(Stat.DAMAGE to 7.0), ItemRarity.COMMON),
     MACE                        ("mace", "Mace", mapOf(Stat.DAMAGE to 15.0), ItemRarity.RARE),
@@ -29,11 +35,11 @@ enum class Items(val key: String, val displayName: String, val stats: Map<Stat, 
     IRON_AXE                    ("iron_axe", "Iron Axe", mapOf(Stat.DAMAGE to 3.5), ItemRarity.COMMON),
     IRON_SWORD                  ("iron_sword", "Iron Sword", mapOf(Stat.DAMAGE to 4.5), ItemRarity.COMMON),
 
-    GOLD_PICKAXE                ("gold_pickaxe", "Golden Pickaxe", mapOf(Stat.DAMAGE to 1.5), ItemRarity.COMMON),
-    GOLD_SHOVEL                 ("gold_shovel", "Golden Shovel", mapOf(), ItemRarity.COMMON),
-    GOLD_HOE                    ("gold_hoe", "Golden Hoe", mapOf(), ItemRarity.COMMON),
-    GOLD_AXE                    ("gold_axe", "Golden Axe", mapOf(Stat.DAMAGE to 2.0), ItemRarity.COMMON),
-    GOLD_SWORD                  ("gold_sword", "Golden Sword", mapOf(Stat.DAMAGE to 2.5), ItemRarity.COMMON),
+    GOLDEN_PICKAXE              ("golden_pickaxe", "Golden Pickaxe", mapOf(Stat.DAMAGE to 1.5), ItemRarity.COMMON),
+    GOLDEN_SHOVEL               ("golden_shovel", "Golden Shovel", mapOf(), ItemRarity.COMMON),
+    GOLDEN_HOE                  ("golden_hoe", "Golden Hoe", mapOf(), ItemRarity.COMMON),
+    GOLDEN_AXE                  ("golden_axe", "Golden Axe", mapOf(Stat.DAMAGE to 2.0), ItemRarity.COMMON),
+    GOLDEN_SWORD                ("golden_sword", "Golden Sword", mapOf(Stat.DAMAGE to 2.5), ItemRarity.COMMON),
 
     DIAMOND_PICKAXE             ("diamond_pickaxe", "Diamond Pickaxe", mapOf(Stat.DAMAGE to 1.5), ItemRarity.COMMON),
     DIAMOND_SHOVEL              ("diamond_shovel", "Diamond Shovel", mapOf(), ItemRarity.COMMON),
@@ -80,9 +86,19 @@ enum class Items(val key: String, val displayName: String, val stats: Map<Stat, 
     ELYTRA                      ("elytra", "Elytra", mapOf(), ItemRarity.RARE),
     ;
     companion object {
-        fun retrieve(name: String): Items? {
+        val ITEM_TYPE_KEY = "ramrpg-item-type"
+        fun retrieve(inputItem: ItemStack): Items? {
+            if (inputItem != null && inputItem.hasItemMeta() && PDCs.has(inputItem.itemMeta, ITEM_TYPE_KEY)) {
+                val customItemType = PDCs.get(inputItem.itemMeta, ITEM_TYPE_KEY, PersistentDataType.STRING)
+                if (customItemType != null) {
+                    for (item in entries) {
+                        if (item.key != customItemType) continue
+                        return item
+                    }
+                }
+            }
             for (item in entries) {
-                if (!item.name.equals(name, true)) continue
+                if (!item.name.equals(inputItem.type.name, true)) continue
                 return item
             }
             return null

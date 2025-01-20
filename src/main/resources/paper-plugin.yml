@@ -21,3 +21,8 @@ dependencies:
       required: false
       # This means that your plugin will not have access to their classpath
       join-classpath: true
+    MythicMobs:
+      load: BEFORE
+      required: false
+      # This means that your plugin will not have access to their classpath
+      join-classpath: true

@@ -2,10 +2,13 @@ package dev.willram.ramrpg.enchants
 
 import dev.willram.ramcore.event.Events
 import org.bukkit.Material
+import org.bukkit.entity.EntityType
 import org.bukkit.entity.Player
 import org.bukkit.entity.Villager
+import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.inventory.InventoryOpenEvent
 import org.bukkit.event.inventory.InventoryType
+import org.bukkit.event.inventory.PrepareAnvilEvent
 import org.bukkit.event.inventory.PrepareGrindstoneEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.inventory.MerchantRecipe
@@ -41,6 +44,15 @@ class EnchantingSystem {
                     e.result = result
                 }
 
+            // Stop the use of enchanted books for now
+            Events.subscribe(PrepareAnvilEvent::class.java)
+                .filter { e -> e.result != null }
+                .filter { e -> e.inventory.firstItem != null && e.inventory.secondItem != null }
+                .filter { e -> e.inventory.firstItem?.type == Material.ENCHANTED_BOOK || e.inventory.secondItem?.type == Material.ENCHANTED_BOOK }
+                .handler { e ->
+                    e.result = null
+                }
+
             // Remove minecraft enchants from chests
             Events.subscribe(InventoryOpenEvent::class.java)
                 .filter { e -> e.inventory.type == InventoryType.CHEST }
@@ -50,6 +62,16 @@ class EnchantingSystem {
                         if (item == null || item.enchantments.isEmpty()) continue
                         Enchantments.convertEnchants(item)
                     }
+                }
+
+            // Remove minecraft enchants from pickups
+            Events.subscribe(EntityPickupItemEvent::class.java)
+                .filter { e -> e.entity.type == EntityType.PLAYER }
+                .handler { e ->
+                    val item = e.item.itemStack.clone()
+                    if (item.enchantments.isEmpty()) return@handler
+                    Enchantments.convertEnchants(item)
+                    e.item.itemStack = item
                 }
 
             // Remove minecraft enchants from trades

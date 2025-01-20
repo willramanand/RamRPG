@@ -28,7 +28,7 @@ class SkillsMenu(player: Player) : Gui(player, 6, "${player.name}'s Skills") {
 
         this.setItem(0, ItemStackBuilder.of(Material.PLAYER_HEAD).name(player.name).transformMeta { meta ->
             val skullMeta = meta as SkullMeta
-            skullMeta.setOwningPlayer(player)
+            skullMeta.owningPlayer = player
         }.build {});
         this.setItem(12, this.getSkillItem(Skill.AGILITY, Material.RABBIT_FOOT, player));
         this.setItem(13, this.getSkillItem(Skill.ALCHEMY, Material.POTION, player));
@@ -45,7 +45,11 @@ class SkillsMenu(player: Player) : Gui(player, 6, "${player.name}'s Skills") {
         this.setItem(45, ItemStackBuilder.of(Material.BARRIER).name("<red>Close").build {
             this.player.closeInventory()
         })
-        //this.setItem(53, InventoryItem.getStatsPage());
+        this.setItem(53, ItemStackBuilder.of(Material.BOOKSHELF).name("<blue>Stats").build {
+            this.player.closeInventory()
+            val menu = StatsMenu(this.player)
+            menu.open()
+        });
     }
 
     override fun clickHandler(e: InventoryClickEvent): Boolean { return false }
@@ -92,7 +96,6 @@ class SkillsMenu(player: Player) : Gui(player, 6, "${player.name}'s Skills") {
             lore.add(Component.empty())
 
             meta.lore(lore)
-            PDCs.set(meta, RamRPG.get().GUI_ITEM_KEY, PersistentDataType.INTEGER, 1)
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES)
         }.build {}
     }
