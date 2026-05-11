@@ -1,0 +1,16 @@
+{
+  "ramrpg.stat.damage": "Damage",
+  "ramrpg.stat.strength": "Strength",
+  "ramrpg.stat.health": "Health",
+  "ramrpg.stat.health_regen": "Health Regen",
+  "ramrpg.stat.defense": "Defense",
+  "ramrpg.stat.true_defense": "True Defense",
+  "ramrpg.stat.speed": "Speed",
+  "ramrpg.stat.attack_speed": "Attack Speed",
+  "ramrpg.stat.crit_chance": "Crit Chance",
+  "ramrpg.stat.crit_damage": "Crit Damage",
+  "ramrpg.stat.ferocity": "Ferocity",
+  "ramrpg.stat.lifesteal": "Lifesteal",
+  "ramrpg.stat.fortune": "Fortune",
+  "ramrpg.stat.wisdom": "Wisdom"
+}

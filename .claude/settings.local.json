@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn -q -DskipTests compile)",
+      "Bash(mvn -q -o compile)",
+      "Bash(mvn -q compile)",
+      "Bash(git stash *)",
+      "Bash(unzip -l /c/Users/willr/.m2/repository/dev/willram/RamCore/2.0.0/RamCore-2.0.0.jar)",
+      "Read(//tmp/**)",
+      "Bash(ls dev/willram/ramcore/cooldown/)",
+      "Bash(ls dev/willram/ramcore/display/)",
+      "Bash(ls dev/willram/ramcore/packet/)",
+      "Bash(mvn compile *)",
+      "Bash(mvn -q test)",
+      "Bash(java -version)",
+      "Read(//c/Program Files/Java/**)",
+      "Bash(where java *)",
+      "Read(//c/Program Files/Microsoft/**)",
+      "Bash(mvn test *)",
+      "Bash(mvn -DskipTests compile)",
+      "Bash(unzip -l /c/Users/willr/.m2/repository/dev/willram/ramcore/1.0.0-SNAPSHOT/ramcore-1.0.0-SNAPSHOT.jar)",
+      "Bash(unzip -p /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar com/comphenix/protocol/events/PacketContainer.class)",
+      "Bash(javap -p -s)",
+      "Read(//c/tmp/**)",
+      "Bash(unzip -o -q /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar com/comphenix/protocol/events/PacketContainer.class)",
+      "Bash(javap -p PacketContainer.class)",
+      "Bash(mkdir -p /tmp/pl)",
+      "Bash(unzip -o -q /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar 'com/comphenix/protocol/events/PacketContainer.class')",
+      "Bash(javap -p com/comphenix/protocol/events/PacketContainer.class)",
+      "Bash(javap -p /tmp/pl/com/comphenix/protocol/events/PacketContainer.class)",
+      "Bash(unzip -o -q /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar -d /tmp/pl 'com/comphenix/protocol/events/AbstractStructure.class')",
+      "Bash(javap -p /tmp/pl/com/comphenix/protocol/events/AbstractStructure.class)",
+      "Bash(unzip -p /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar 'com/comphenix/protocol/PacketType$Play$Client.class')",
+      "Bash(javap -p)",
+      "Bash(unzip -o -q /c/Users/willr/.m2/repository/com/comphenix/protocol/ProtocolLib/5.1.0/ProtocolLib-5.1.0.jar -d /tmp/pl 'com/comphenix/protocol/PacketType$Play$Client.class')",
+      "Bash(javap -p '/tmp/pl/com/comphenix/protocol/PacketType$Play$Client.class')"
+    ]
+  }
+}
