@@ -6,20 +6,22 @@
 
     <groupId>dev.willram</groupId>
     <artifactId>RamRPG</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>RamRPG</name>
 
     <properties>
         <java.version>21</java.version>
-        <kotlin.version>2.1.0-Beta2</kotlin.version>
+        <kotlin.version>2.3.20</kotlin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <surefire.jvm>C:\Program Files\Microsoft\jdk-25.0.1.8-hotspot\bin\java.exe</surefire.jvm>
     </properties>
 
     <build>
         <defaultGoal>clean package</defaultGoal>
         <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+        <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.jetbrains.kotlin</groupId>
@@ -33,6 +35,13 @@
                             <goal>compile</goal>
                         </goals>
                     </execution>
+                    <execution>
+                        <id>test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
                 </executions>
                 <configuration>
                     <jvmTarget>${java.version}</jvmTarget>
@@ -40,11 +49,19 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <jvm>${surefire.jvm}</jvm>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>20</source>
-                    <target>20</target>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
         </plugins>
@@ -78,13 +95,17 @@
             <name>Lumine Releases</name>
             <url>https://mvn.lumine.io/repository/maven-public/</url>
         </repository>
+        <repository>
+            <id>bstats</id>
+            <url>https://repo.codemc.io/repository/maven-public/</url>
+        </repository>
     </repositories>
 
     <dependencies>
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.4-R0.1-SNAPSHOT</version>
+            <version>26.1.2.build.60-stable</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -95,7 +116,7 @@
         <dependency>
             <groupId>dev.willram</groupId>
             <artifactId>RamCore</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>2.0.0</version>
         </dependency>
         <dependency>
             <groupId>com.comphenix.protocol</groupId>
@@ -114,6 +135,17 @@
             <artifactId>Mythic-Dist</artifactId>
             <version>5.6.1</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-bukkit</artifactId>
+            <version>3.0.2</version>
         </dependency>
     </dependencies>
 </project>
