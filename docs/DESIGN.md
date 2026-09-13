@@ -38,6 +38,7 @@ damage pipeline, and the dataVersion ledger.
 
 - [3.0 — Command surface and the /skills deprecation map](design/3.0-command-surface.md)
 - [3.1a — Station and recipe model; quality roll formula; critical-craft chance](design/3.1a-crafting-model.md)
+- [3.1c — Crafting XP rates](design/3.1c-crafting-xp.md)
 - [3.2a — Material tier ladder](design/3.2a-material-tiers.md)
 
 ## Phase 5
