@@ -7,7 +7,6 @@ import dev.willram.ramrpg.core.modules.BossModule
 import dev.willram.ramrpg.core.modules.BuffModule
 import dev.willram.ramrpg.core.modules.CraftingModule
 import dev.willram.ramrpg.core.modules.DungeonModule
-import dev.willram.ramrpg.core.modules.MobModule
 import dev.willram.ramrpg.core.modules.PerkModule
 import dev.willram.ramrpg.core.modules.RpgModules
 import dev.willram.ramrpg.core.modules.ScheduleModule
@@ -26,18 +25,21 @@ import org.junit.jupiter.api.Test
  * Bukkit) is not invoked.
  *
  * WP-1.5a populated the ContentModule seam (the HOCON ContentLoader), moving it from the seeded-empty
- * set to the populated set: seven populated, nine seeded empty.
+ * set to the populated set: seven populated, nine seeded empty. WP-6.2 populated the MobModule seam
+ * (region level bands -- see docs/design/6.2-level-bands.md): eight populated, eight seeded empty.
+ * MobModule's `setup()` resolves a real service and touches Bukkit (RamCore Metadata), so -- like every
+ * other populated seam -- it is exercised only via construction here, never via `setup()`.
  */
 class ModuleSeamTest {
 
     private val expectedPopulated = setOf(
         "LootModule", "QuestModule", "RewardModule", "CombatModule", "EconomyModule", "UiModule",
-        "ContentModule",
+        "ContentModule", "MobModule",
     )
 
     private val expectedEmpty = setOf(
         "CraftingModule", "SetModule", "BuffModule", "PerkModule",
-        "MobModule", "BossModule", "VendorModule", "DungeonModule", "ScheduleModule",
+        "BossModule", "VendorModule", "DungeonModule", "ScheduleModule",
     )
 
     @Test
@@ -45,7 +47,7 @@ class ModuleSeamTest {
         val modules = RpgModules.all(TestServiceContext.withRegistry())
         val names = modules.map { it::class.simpleName }
 
-        assertEquals(16, modules.size, "expected 7 populated + 9 seeded-empty module seams")
+        assertEquals(16, modules.size, "expected 8 populated + 8 seeded-empty module seams")
         assertEquals(names.size, names.toSet().size, "no module may be bound (listed) twice")
         assertEquals(expectedPopulated + expectedEmpty, names.toSet(), "module set must equal the reserved list")
     }
@@ -55,8 +57,8 @@ class ModuleSeamTest {
         val names = RpgModules.all(TestServiceContext.withRegistry()).map { it::class.simpleName }.toSet()
         assertEquals(expectedPopulated, names intersect expectedPopulated)
         assertEquals(expectedEmpty, names intersect expectedEmpty)
-        assertEquals(7, expectedPopulated.size)
-        assertEquals(9, expectedEmpty.size)
+        assertEquals(8, expectedPopulated.size)
+        assertEquals(8, expectedEmpty.size)
     }
 
     @Test
@@ -64,7 +66,7 @@ class ModuleSeamTest {
         val ctx = TestServiceContext.withRegistry()
         val emptyModules: List<TerminableModule> = listOf(
             CraftingModule(ctx), SetModule(ctx), BuffModule(ctx), PerkModule(ctx),
-            MobModule(ctx), BossModule(ctx), VendorModule(ctx), DungeonModule(ctx), ScheduleModule(ctx),
+            BossModule(ctx), VendorModule(ctx), DungeonModule(ctx), ScheduleModule(ctx),
         )
         for (module in emptyModules) {
             val recorder = RecordingConsumer()
