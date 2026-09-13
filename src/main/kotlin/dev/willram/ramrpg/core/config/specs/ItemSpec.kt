@@ -13,6 +13,16 @@
  * [dev.willram.ramrpg.api.items.ItemDefinition.effects] belongs to [ContentRegistrarRpg] (out of this
  * WP's file scope); the spec captures them so that later wiring is a one-line registrar change.
  *
+ * WP-2.1a (now filled): items may also carry `item-level`, `requirements = [...]` and `equip-slots`.
+ * Same seam shape as effects above: this spec parses and holds them (see [itemLevel], [requirements],
+ * [equipSlots]), but wiring them onto the live [dev.willram.ramrpg.api.items.ItemDefinition] fields of
+ * the same name is [ContentRegistrarRpg]'s job (out of THIS WP's file scope -- WP-2.1a owns only the
+ * `ItemDefinition` fields existing, the pure parsing here, and the Kotlin builtins; WP-1.5d/ContentRegistrarRpg
+ * wiring is separate). [equipSlots] is `null` when the HOCON omits `equip-slots`, meaning "no override" --
+ * the eventual registrar call (or a direct `ItemDefinition(...)` construction) should omit the
+ * constructor argument so `ItemDefinition`'s own category-based default applies, rather than passing an
+ * empty set.
+ *
  * HOCON shape (namespaced ids/keys MUST be quoted -- ':' is a HOCON separator):
  * ```
  * id = "ramrpg:test_sword"
@@ -26,6 +36,13 @@
  * max-stack = 1
  * custom-model-data = 1001
  * allow-vanilla-wrapper = false
+ * item-level = 15
+ * requirements = [
+ *   { type = skill_level, skill = "ramrpg:combat", level = 10 }
+ *   { type = stat_threshold, stat = "ramrpg:strength", min = 20.0 }
+ *   { type = perk_owned, perk = "ramrpg:dragon_slayer" }   # STUB until WP-5.1a -- see ItemRequirement.PerkOwned
+ * ]
+ * equip-slots = ["HAND"]                # optional; omit to use the category -> slot default
  * ```
  */
 package dev.willram.ramrpg.core.config.specs
@@ -34,13 +51,16 @@ import dev.willram.ramcore.content.ContentDeserializeException
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.Effect
 import dev.willram.ramrpg.api.identity.ItemKey
+import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.items.ItemCategory
+import dev.willram.ramrpg.api.items.ItemRequirement
 import dev.willram.ramrpg.api.items.Rarity
 import dev.willram.ramrpg.api.items.StatRoll
 import dev.willram.ramrpg.core.config.RpgContentSpec
 import dev.willram.ramrpg.core.config.SpecNodes
 import net.kyori.adventure.text.Component
+import org.bukkit.inventory.EquipmentSlot
 import org.spongepowered.configurate.ConfigurationNode
 
 data class ItemSpec(
@@ -59,6 +79,12 @@ data class ItemSpec(
     val allowVanillaWrapper: Boolean,
     /** WP-1.5b: the item's parsed effect bundle (empty when loaded without effect registries). */
     val effects: List<Effect> = emptyList(),
+    /** WP-2.1a: planning/lore level; defaults to 1 (starter tier) when `item-level` is absent. */
+    val itemLevel: Int = 1,
+    /** WP-2.1a: parsed `requirements = [...]` gates; empty when absent. */
+    val requirements: List<ItemRequirement> = emptyList(),
+    /** WP-2.1a: explicit `equip-slots` override, or null when absent (defer to the category default). */
+    val equipSlots: Set<EquipmentSlot>? = null,
 ) : RpgContentSpec {
     override val id: ContentId get() = key.id
 
@@ -78,6 +104,9 @@ data class ItemSpec(
                 customModelData = SpecNodes.intOrNull(node, "custom-model-data"),
                 allowVanillaWrapper = SpecNodes.boolOr(node, "allow-vanilla-wrapper", false),
                 effects = EffectSpec.bundle(node, "effects", id, effects),
+                itemLevel = SpecNodes.intOr(node, "item-level", 1),
+                requirements = requirements(node),
+                equipSlots = equipSlots(node),
             )
         }
 
@@ -88,5 +117,37 @@ data class ItemSpec(
                 if (min > max) throw ContentDeserializeException("stat-roll min $min is greater than max $max")
                 StatRoll(StatKey(SpecNodes.requireIdAt(roll, "stat")), min, max)
             }
+
+        /**
+         * Parses `requirements = [...]`. Each entry's `type` is a closed grammar owned by
+         * [ItemRequirement] (mirrors [EffectSpec.one]'s `type` dispatch): `skill_level`, `stat_threshold`
+         * or `perk_owned`. An unrecognised type throws [ContentDeserializeException] naming it, so
+         * [dev.willram.ramcore.content.SpecLoader] tags it with the offending file + path.
+         */
+        private fun requirements(node: ConfigurationNode): List<ItemRequirement> =
+            node.node("requirements").childrenList().map { req ->
+                when (val type = SpecNodes.requiredString(req, "type", "item requirement type").lowercase()) {
+                    "skill_level" -> ItemRequirement.SkillLevel(
+                        skill = SkillKey(SpecNodes.requireIdAt(req, "skill")),
+                        level = SpecNodes.intOr(req, "level", 1),
+                    )
+                    "stat_threshold" -> ItemRequirement.StatThreshold(
+                        stat = StatKey(SpecNodes.requireIdAt(req, "stat")),
+                        min = SpecNodes.doubleOr(req, "min", 0.0),
+                    )
+                    // STUB until WP-5.1a: PerkKey/PerkService do not exist yet, so this carries the raw
+                    // ContentId a pack author names -- see ItemRequirement.PerkOwned's KDoc.
+                    "perk_owned" -> ItemRequirement.PerkOwned(perk = SpecNodes.requireIdAt(req, "perk"))
+                    else -> throw ContentDeserializeException(
+                        "unknown item requirement type '$type'; expected skill_level, stat_threshold or perk_owned",
+                    )
+                }
+            }
+
+        /** `equip-slots` is absent by default (null = "use the ItemDefinition category default"). */
+        private fun equipSlots(node: ConfigurationNode): Set<EquipmentSlot>? {
+            if (node.node("equip-slots").virtual()) return null
+            return SpecNodes.enumList<EquipmentSlot>(node, "equip-slots", "equipment slot").toSet()
+        }
     }
 }

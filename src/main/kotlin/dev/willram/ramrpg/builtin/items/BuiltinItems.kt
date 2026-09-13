@@ -6,12 +6,14 @@ import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.items.ItemCategory
 import dev.willram.ramrpg.api.items.ItemDefinition
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
+import dev.willram.ramrpg.api.items.ItemRequirement
 import dev.willram.ramrpg.api.items.Rarity
 import dev.willram.ramrpg.api.items.StatRoll
 import dev.willram.ramrpg.api.stats.ModifierOperation
 import dev.willram.ramrpg.api.stats.ModifierSource
 import dev.willram.ramrpg.api.stats.SourceType
 import dev.willram.ramrpg.api.stats.StatModifier
+import dev.willram.ramrpg.builtin.identity.RamSkills
 import dev.willram.ramrpg.builtin.identity.RamStats
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
@@ -117,6 +119,44 @@ private val DEFS = listOf(
 private val WEAPON_CATS = setOf(ItemCategory.SWORD, ItemCategory.AXE, ItemCategory.MACE, ItemCategory.TRIDENT, ItemCategory.BOW, ItemCategory.CROSSBOW)
 private val ARMOR_CATS = setOf(ItemCategory.HELMET, ItemCategory.CHESTPLATE, ItemCategory.LEGGINGS, ItemCategory.BOOTS)
 
+/**
+ * WP-2.1a: `itemLevel` anchor per [Rarity], lined up with the 0.1 power-curve bands (band starts:
+ * 1 / 11 / 26 / 46 / 71) -- see `docs/design/2.1a-item-level-requirements.md`.
+ */
+private fun itemLevelFor(rarity: Rarity): Int = when (rarity) {
+    Rarity.COMMON -> 1
+    Rarity.UNCOMMON -> 11
+    Rarity.RARE -> 26
+    Rarity.EPIC -> 46
+    Rarity.LEGENDARY -> 60
+    Rarity.MYTHIC -> 85
+}
+
+/** WP-2.1a: the Combat skill level a vanilla-wrapper weapon/armor piece gates on; COMMON gates nothing. */
+private fun combatLevelFor(rarity: Rarity): Int = when (rarity) {
+    Rarity.COMMON -> 0
+    Rarity.UNCOMMON -> 10
+    Rarity.RARE -> 20
+    Rarity.EPIC -> 35
+    Rarity.LEGENDARY -> 45
+    Rarity.MYTHIC -> 60
+}
+
+/**
+ * WP-2.1a: sensible default requirements for a vanilla-wrapper [IDef] -- weapons gate on Combat level,
+ * armor gates on half that (armor is worn passively, weapons are the offense-facing gate); COMMON items
+ * (starter tier) are ungated. Tools (pickaxe/shovel/hoe) and misc/utility items stay ungated.
+ */
+private fun requirementsFor(d: IDef): List<ItemRequirement> {
+    val level = combatLevelFor(d.rarity)
+    if (level <= 0) return emptyList()
+    return when {
+        d.cats.any { it in WEAPON_CATS } -> listOf(ItemRequirement.SkillLevel(RamSkills.COMBAT, level))
+        d.cats.any { it in ARMOR_CATS } -> listOf(ItemRequirement.SkillLevel(RamSkills.COMBAT, level / 2))
+        else -> emptyList()
+    }
+}
+
 /** Non-vanilla custom items (boss / loot exclusives). */
 private val CUSTOM: List<ItemDefinition> = listOf(
     ItemDefinition(
@@ -130,6 +170,11 @@ private val CUSTOM: List<ItemDefinition> = listOf(
             StatRoll(RamStats.STRENGTH, 5.0, 15.0),
             StatRoll(RamStats.CRIT_CHANCE, 5.0, 12.0),
             StatRoll(RamStats.CRIT_DAMAGE, 10.0, 30.0),
+        ),
+        itemLevel = itemLevelFor(Rarity.RARE),
+        requirements = listOf(
+            ItemRequirement.SkillLevel(RamSkills.COMBAT, 25),
+            ItemRequirement.StatThreshold(RamStats.STRENGTH, 20.0),
         ),
     ),
     ItemDefinition(
@@ -146,6 +191,11 @@ private val CUSTOM: List<ItemDefinition> = listOf(
             StatRoll(RamStats.HEALTH, 30.0, 80.0),
             StatRoll(RamStats.WISDOM, 20.0, 60.0),
         ),
+        itemLevel = itemLevelFor(Rarity.LEGENDARY),
+        requirements = listOf(
+            ItemRequirement.SkillLevel(RamSkills.COMBAT, 45),
+            ItemRequirement.StatThreshold(RamStats.HEALTH, 150.0),
+        ),
     ),
     ItemDefinition(
         key = ik("dragon_fang"),
@@ -159,6 +209,15 @@ private val CUSTOM: List<ItemDefinition> = listOf(
             StatRoll(RamStats.CRIT_DAMAGE, 40.0, 100.0),
             StatRoll(RamStats.FEROCITY, 20.0, 60.0),
         ),
+        itemLevel = itemLevelFor(Rarity.MYTHIC),
+        // Intentionally gated behind the not-yet-built perk system (see ItemRequirement.PerkOwned's
+        // stub KDoc): until WP-5.1a ships PerkService this requirement never evaluates as met, so this
+        // mythic drop is a definition-time proof the form parses/round-trips, not a live gate WP-2.1c
+        // enforces today.
+        requirements = listOf(
+            ItemRequirement.SkillLevel(RamSkills.COMBAT, 70),
+            ItemRequirement.PerkOwned(dev.willram.ramcore.content.ContentId.of("ramrpg", "dragon_slayer")),
+        ),
     ),
     ItemDefinition(
         key = ik("ember_charm"),
@@ -167,6 +226,7 @@ private val CUSTOM: List<ItemDefinition> = listOf(
         rarity = Rarity.UNCOMMON,
         categories = setOf(ItemCategory.MISC),
         baseStats = listOf(stat(RamStats.STRENGTH, 5.0, "ember_charm")),
+        itemLevel = itemLevelFor(Rarity.UNCOMMON),
     ),
 )
 
@@ -190,6 +250,8 @@ object BuiltinItems {
                 baseStats = mods,
                 allowVanillaWrapper = true,
                 statRolls = rolls,
+                itemLevel = itemLevelFor(d.rarity),
+                requirements = requirementsFor(d),
             ))
         }
         for (custom in CUSTOM) reg.register(owner, custom)

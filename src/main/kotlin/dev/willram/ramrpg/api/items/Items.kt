@@ -10,6 +10,7 @@ import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.Effect
 import dev.willram.ramrpg.api.identity.EnchantmentKey
 import dev.willram.ramrpg.api.identity.ItemKey
+import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.stats.StatFormat
 import dev.willram.ramrpg.api.stats.StatModifier
@@ -20,6 +21,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.translation.GlobalTranslator
 import org.bukkit.Material
 import org.bukkit.entity.Player
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import java.util.UUID
 
@@ -29,6 +31,74 @@ enum class ItemCategory {
     SWORD, AXE, PICKAXE, SHOVEL, HOE, BOW, CROSSBOW, TRIDENT, MACE,
     FISHING_ROD, ELYTRA, HELMET, CHESTPLATE, LEGGINGS, BOOTS,
     SHIELD, ENCHANTED_BOOK, MISC
+}
+
+/**
+ * WP-2.1a: a gate that must be met before an [ItemDefinition] is usable. Definition-side only --
+ * enforcement (inert-on-unmet) and lore rendering are WP-2.1c's job, not this one's. See
+ * `docs/design/2.1a-item-level-requirements.md` for the itemLevel bands these are meant to line up with.
+ */
+sealed interface ItemRequirement {
+    data class SkillLevel(val skill: SkillKey, val level: Int) : ItemRequirement
+    data class StatThreshold(val stat: StatKey, val min: Double) : ItemRequirement
+
+    /**
+     * STUB (WP-2.1a): `PerkKey`/`PerkService` do not exist yet (WP-5.1a ships them), so this carries the
+     * raw [ContentId] a content author names rather than a typed key. [isMet] treats this arm as
+     * fail-closed (always UNMET) rather than silently reporting "met" -- a gate must never quietly
+     * disappear just because its backing system isn't built yet. WP-5.1a replaces this evaluation to
+     * delegate to the real PerkService (and may promote [perk] to a typed `PerkKey` then).
+     */
+    data class PerkOwned(val perk: ContentId) : ItemRequirement
+}
+
+/**
+ * A minimal, pure snapshot [ItemRequirement.isMet] evaluates against -- decoupled from a live
+ * [org.bukkit.entity.Player] so evaluation is off-server-testable. Adapting a real player's skill levels
+ * / stat snapshot onto this shape is WP-2.1c's job (enforcement), not this one's.
+ */
+interface ItemRequirementState {
+    fun skillLevel(skill: SkillKey): Int
+    fun statValue(stat: StatKey): Double
+}
+
+/** Evaluates one requirement against [state]. See [ItemRequirement.PerkOwned] for its stub behavior. */
+fun ItemRequirement.isMet(state: ItemRequirementState): Boolean = when (this) {
+    is ItemRequirement.SkillLevel -> state.skillLevel(skill) >= level
+    is ItemRequirement.StatThreshold -> state.statValue(stat) >= min
+    is ItemRequirement.PerkOwned -> false
+}
+
+/**
+ * WP-2.1a: the default [EquipmentSlot] each [ItemCategory] occupies when equipped -- see
+ * `docs/design/2.1a-item-level-requirements.md` for the full table and rationale.
+ * [ItemCategory.MISC] and [ItemCategory.ENCHANTED_BOOK] have no default slot (not directly equippable);
+ * an [ItemDefinition] can still override with an explicit `equipSlots`.
+ */
+object EquipSlotDefaults {
+    private val BY_CATEGORY: Map<ItemCategory, EquipmentSlot> = mapOf(
+        ItemCategory.SWORD to EquipmentSlot.HAND,
+        ItemCategory.AXE to EquipmentSlot.HAND,
+        ItemCategory.PICKAXE to EquipmentSlot.HAND,
+        ItemCategory.SHOVEL to EquipmentSlot.HAND,
+        ItemCategory.HOE to EquipmentSlot.HAND,
+        ItemCategory.BOW to EquipmentSlot.HAND,
+        ItemCategory.CROSSBOW to EquipmentSlot.HAND,
+        ItemCategory.TRIDENT to EquipmentSlot.HAND,
+        ItemCategory.MACE to EquipmentSlot.HAND,
+        ItemCategory.FISHING_ROD to EquipmentSlot.HAND,
+        ItemCategory.SHIELD to EquipmentSlot.OFF_HAND,
+        ItemCategory.HELMET to EquipmentSlot.HEAD,
+        ItemCategory.CHESTPLATE to EquipmentSlot.CHEST,
+        ItemCategory.ELYTRA to EquipmentSlot.CHEST,
+        ItemCategory.LEGGINGS to EquipmentSlot.LEGS,
+        ItemCategory.BOOTS to EquipmentSlot.FEET,
+        // ItemCategory.ENCHANTED_BOOK, ItemCategory.MISC: intentionally absent -- no default slot.
+    )
+
+    /** The union of each category's default slot; categories with no default contribute nothing. */
+    fun forCategories(categories: Set<ItemCategory>): Set<EquipmentSlot> =
+        categories.mapNotNullTo(LinkedHashSet()) { BY_CATEGORY[it] }
 }
 
 data class ReforgeKey(val id: ContentId)
@@ -217,6 +287,18 @@ data class ItemDefinition(
     val description: List<Component> = emptyList(),
     /** Random bonus rolls applied to ItemInstanceData.customRolls on create. */
     val statRolls: List<StatRoll> = emptyList(),
+    /**
+     * WP-2.1a: the player level this item is "meant for" -- a planning/lore number, not a live
+     * mechanic. Fits the 0.1 power-curve bands; see `docs/design/2.1a-item-level-requirements.md`.
+     */
+    val itemLevel: Int = 1,
+    /** WP-2.1a: gates that must be met before this item is usable. WP-2.1c enforces; definition only here. */
+    val requirements: List<ItemRequirement> = emptyList(),
+    /**
+     * WP-2.1a: which [EquipmentSlot]s this item occupies when worn/held. Defaults from [categories] via
+     * [EquipSlotDefaults]; pass explicitly to override (e.g. a trinket that occupies the off hand).
+     */
+    val equipSlots: Set<EquipmentSlot> = EquipSlotDefaults.forCategories(categories),
 )
 
 interface ItemDefinitionRegistry {
