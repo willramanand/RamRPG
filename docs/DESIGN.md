@@ -40,6 +40,7 @@ damage pipeline, and the dataVersion ledger.
 - [3.1a — Station and recipe model; quality roll formula; critical-craft chance](design/3.1a-crafting-model.md)
 - [3.1c — Crafting XP rates](design/3.1c-crafting-xp.md)
 - [3.1d — Crafting content pipeline (recipes + stations loading)](design/3.1d-crafting-pipeline.md)
+- [3.1e — Crafting runtime: outcome cap/failure/cost, craft XP, crafting bench](design/3.1e-crafting-runtime.md)
 - [3.2a — Material tier ladder](design/3.2a-material-tiers.md)
 - [3.3a — Upgrade cost curve and failure thresholds](design/3.3a-upgrade-costs.md)
 - [3.3c — Reforge costs](design/3.3c-reforge-costs.md)

@@ -37,7 +37,9 @@ import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
 import dev.willram.ramrpg.api.items.ItemInstanceData
 import dev.willram.ramrpg.api.items.ItemInstanceInit
 import dev.willram.ramrpg.api.items.ItemInstanceService
+import dev.willram.ramrpg.api.items.Rarity
 import dev.willram.ramrpg.api.skills.SkillService
+import dev.willram.ramrpg.core.crafting.CraftRuntime
 import dev.willram.ramrpg.core.listeners.EconomyService
 import dev.willram.ramrpg.core.listeners.ItemRequirementServices
 import dev.willram.ramrpg.core.listeners.requirementStateFor
@@ -189,10 +191,6 @@ class CraftingServiceImpl(
         val result = CraftEngine.preview(recipe, ctx)
         if (result !is CraftResult.Success) return result
 
-        // XP-level cost needs the live player, so it is gated here (money is gated by the planner via
-        // CraftContext.balance). Fail without side effects if the player cannot pay the level cost.
-        if (player.level < recipe.cost.experienceLevels) return CraftResult.Failure(CraftFailure.INSUFFICIENT_FUNDS)
-
         // R2: validate that every write can actually happen BEFORE any side effect, so a missing output
         // definition or an over-sized target aborts the craft with NOTHING consumed or granted.
         val app = CraftEngine.applicationFor(result.outcome, player.uniqueId)
@@ -200,11 +198,56 @@ class CraftingServiceImpl(
         val targetAmount = if (app is CraftEngine.Application.ModifyTarget) targetStack?.amount else null
         CraftEngine.validateApplication(app, outputDefExists, targetAmount)?.let { return CraftResult.Failure(it) }
 
+        // WP-3.1e: the per-outcome runtime -- the PURE CraftRuntime dispatch reuses UpgradeOutcomes /
+        // SocketOutcomes / ReforgeOutcomes to add the cap / failure / rarity-scaled-cost the generic engine
+        // does not model. It is a dispatch table, not a bespoke branch per kind: craft() only reads its
+        // verdict and relays it. A REJECTED verdict (upgrade at cap, socket over the slot cap) aborts here
+        // -- BEFORE any consume -- so the menu keeps the reagents (R2). SUCCESS and FAILURE both apply and
+        // return Success, so the menu drains the escrow (a rolled upgrade FAILURE is still a consumed
+        // attempt; see the escrow-interaction note in docs/design/3.1e-crafting-runtime.md).
+        val effective = CraftRuntime.effectiveCraft(
+            outcome = recipe.outcome,
+            plan = result.outcome,
+            target = ctx.target,
+            rarity = rarityOf(ctx.target),
+            confCost = result.cost,
+            seed = ctx.seed,
+        )
+        if (effective.status == CraftRuntime.CraftStatus.REJECTED) {
+            effective.message?.let { player.sendMessage(it) }
+            return CraftResult.Failure(effective.rejection ?: CraftFailure.INVALID_TARGET)
+        }
+
+        // Funds are gated on the EFFECTIVE (rarity-scaled) cost, not the static conf cost -- and BEFORE any
+        // side effect (R2), so an upgrade the player cannot fund the scaled gold/levels for consumes nothing.
+        if (player.level < effective.cost.experienceLevels) return CraftResult.Failure(CraftFailure.INSUFFICIENT_FUNDS)
+        if (economy.ramCoreEconomy.balance(player.uniqueId) < effective.cost.money) {
+            return CraftResult.Failure(CraftFailure.INSUFFICIENT_FUNDS)
+        }
+
+        // Fold the runtime verdict back onto the result the engine applies: the capped / failure-aware
+        // instance to write and the effective cost to charge (consumption/quality/critical are unchanged).
+        val effectiveOutcome = effective.resultData?.let { OutcomePlan.Modify(it) } ?: result.outcome
+        val applied = result.copy(outcome = effectiveOutcome, cost = effective.cost)
+
         // R1: apply INLINE on the caller's (player's owning region) thread -- one synchronous unit with the
         // menu's escrow drain. Never scheduled (a >= 1 tick hop is the R1 loss bug).
-        applyCraft(player, result, targetStack, app)
-        return result
+        applyCraft(player, applied, targetStack, CraftEngine.applicationFor(applied.outcome, player.uniqueId))
+
+        // Relay the per-kind feedback (upgrade success/failure) the pure dispatch selected, and grant craft
+        // XP -- on SUCCESS only (a failed attempt teaches nothing). tier=1 until ItemDefinition.tags is
+        // surfaced (docs/design/3.1e-crafting-runtime.md); forCraft yields null unless the recipe drives a
+        // skill (a NewItem's qualitySkill), so upgrade/socket/reforge grant no XP today.
+        effective.message?.let { player.sendMessage(it) }
+        if (effective.status == CraftRuntime.CraftStatus.SUCCESS) {
+            CraftXpSource.forCraft(recipe, applied, tier = 1)?.let { skillService.addXp(player, it) }
+        }
+        return applied
     }
+
+    /** The [Rarity] of a target instance (from its item definition), or [Rarity.COMMON] when there is none. */
+    private fun rarityOf(target: ItemInstanceData?): Rarity =
+        target?.identity?.key?.let { itemDefs.get(it)?.rarity } ?: Rarity.COMMON
 
     /**
      * Plans [recipe] against [player]'s CURRENT state and [inputs] WITHOUT any side effect -- the station
