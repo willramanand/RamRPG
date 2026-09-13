@@ -284,16 +284,20 @@ class RamRPG : RamPlugin() {
         val def = skillRegistry.get(key)
         val name = def?.displayName ?: Component.text(key.id.value())
         val title = Title.title(
-            Component.text("Level Up!", NamedTextColor.GOLD),
-            Component.text("")
-                .append(name.color(NamedTextColor.YELLOW))
-                .append(Component.text(" Lv $lvl", NamedTextColor.GRAY)),
+            Component.translatable("ramrpg.skill.level_up").color(NamedTextColor.GOLD),
+            Component.translatable(
+                "ramrpg.skill.level_up_subtitle",
+                name.color(NamedTextColor.YELLOW),
+                Component.text(lvl),
+            ).color(NamedTextColor.GRAY),
             Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(2000), Duration.ofMillis(500)),
         )
         p.showTitle(title)
-        p.sendMessage(Component.text("")
-            .append(name.color(NamedTextColor.YELLOW))
-            .append(Component.text(" → Lv $lvl", NamedTextColor.GOLD)))
+        p.sendMessage(Component.translatable(
+            "ramrpg.skill.level_up_message",
+            name.color(NamedTextColor.YELLOW),
+            Component.text(lvl),
+        ).color(NamedTextColor.GOLD))
         p.playSound(p.location, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f)
         stats.markDirty(p, StatDirtyReason.SKILL_LEVEL_CHANGED)
         if (::equipmentListener.isInitialized) equipmentListener.applyAttributes(p)
@@ -304,10 +308,11 @@ class RamRPG : RamPlugin() {
     private fun onMilestone(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {
         val def = skillRegistry.get(key) ?: return
         val reward = lvl * 100.0
-        p.sendMessage(Component.text("")
-            .append(Component.text("Milestone! ", NamedTextColor.LIGHT_PURPLE))
-            .append(def.displayName.color(NamedTextColor.YELLOW))
-            .append(Component.text(" Lv $lvl", NamedTextColor.GOLD)))
+        p.sendMessage(Component.translatable(
+            "ramrpg.skill.milestone",
+            def.displayName.color(NamedTextColor.YELLOW),
+            Component.text(lvl).color(NamedTextColor.GOLD),
+        ).color(NamedTextColor.LIGHT_PURPLE))
         p.playSound(p.location, Sound.ENTITY_FIREWORK_ROCKET_BLAST, 1f, 1f)
         p.world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, p.location.add(0.0, 1.5, 0.0), 30, 0.5, 0.5, 0.5)
         if (::economy.isInitialized && economy.enabled) {

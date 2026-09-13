@@ -92,12 +92,16 @@ class AbilityServiceImpl(
         val results = ArrayList<AbilityResult>()
         for (ab in registry.forTrigger(trigger)) {
             if (isDisabled(ctx.player, ab.key)) {
-                results += AbilityResult.Fail(Component.text("Ability disabled"))
+                results += AbilityResult.Fail(Component.translatable("ramrpg.ability.disabled"))
                 continue
             }
             val unlock = ab.unlockSkill
             if (unlock != null && skillService.level(ctx.player, unlock) < ab.unlockLevel) {
-                results += AbilityResult.Fail(Component.text("Requires ${unlock.id.value()} ${ab.unlockLevel}"))
+                results += AbilityResult.Fail(Component.translatable(
+                    "ramrpg.ability.requires",
+                    Component.text(unlock.id.value()),
+                    Component.text(ab.unlockLevel),
+                ))
                 continue
             }
             val tracker = trackerFor(ab)
@@ -108,13 +112,13 @@ class AbilityServiceImpl(
                 continue
             }
             if (ab.requirements.any { !it.met(ctx) }) {
-                results += AbilityResult.Fail(Component.text("Requirements not met"))
+                results += AbilityResult.Fail(Component.translatable("ramrpg.ability.requirements_not_met"))
                 continue
             }
             val data = playerStore.require(ctx.player.uniqueId)
             val manaCost = ab.costs.filterIsInstance<ResourceCost.Mana>().sumOf { it.amount }
             if (manaCost > 0 && data.currentMana < manaCost) {
-                results += AbilityResult.Fail(Component.text("Not enough mana"))
+                results += AbilityResult.Fail(Component.translatable("ramrpg.ability.not_enough_mana"))
                 continue
             }
             data.currentMana -= manaCost
