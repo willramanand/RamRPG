@@ -4,6 +4,7 @@ import dev.willram.ramcore.RamPlugin
 import dev.willram.ramcore.data.DataKeyCodec
 import dev.willram.ramcore.playerdata.PlayerDataOptions
 import dev.willram.ramcore.playerdata.PlayerDataService
+import dev.willram.ramcore.reward.RewardActionFactories
 import dev.willram.ramcore.store.StoreCodec
 import dev.willram.ramcore.store.StoreMigrations
 import dev.willram.ramcore.store.Stores
@@ -62,6 +63,10 @@ import dev.willram.ramrpg.core.platform.RamCorePlatformScheduler
 import dev.willram.ramrpg.core.rendering.PacketItemRenderer
 import dev.willram.ramrpg.core.rendering.PacketItemRendererImpl
 import dev.willram.ramrpg.core.rendering.PacketRenderListener
+import dev.willram.ramrpg.core.rewards.BuffRewardFactory
+import dev.willram.ramrpg.core.rewards.PerkPointRewardFactory
+import dev.willram.ramrpg.core.rewards.RpgItemRewardFactory
+import dev.willram.ramrpg.core.rewards.SkillXpRewardFactory
 import dev.willram.ramrpg.core.services.AbilityRegistryImpl
 import dev.willram.ramrpg.core.services.AbilityServiceImpl
 import dev.willram.ramrpg.core.services.DamagePipelineImpl
@@ -114,6 +119,16 @@ class RamRPG : RamPlugin() {
     private lateinit var manaRegen: ManaRegen
     private lateinit var equipmentListener: EquipmentListener
     lateinit var economy: EconomyService
+
+    /**
+     * RamCore's reward-action registry: `money`/`command`/`message`/`permission-node-check` from
+     * [RewardActionFactories.standard], plus the RPG-specific types WP-1.2b adds (`skill_xp`,
+     * `rpg_item`, and the `buff`/`perk_point` stubs). Nothing consumes this yet -- QuestService still
+     * carries its own [dev.willram.ramrpg.api.quests.QuestReward] model -- so later WPs can build on
+     * top of a real, populated registry instead of an empty one. WP-1.7b will move this registration
+     * into a RewardModule.
+     */
+    lateinit var rewardFactories: RewardActionFactories
     lateinit var questRegistry: dev.willram.ramrpg.api.quests.QuestRegistry
     lateinit var quests: dev.willram.ramrpg.core.services.QuestService
     var mythicMobsEnabled: Boolean = false
@@ -261,6 +276,11 @@ class RamRPG : RamPlugin() {
         equipmentListener = EquipmentListener(stats).also { it.register() }
         CombatListener(damagePipeline).register()
         economy = EconomyService()
+        rewardFactories = RewardActionFactories.standard(economy.ramCoreEconomy)
+            .register(SkillXpRewardFactory(skillService, platform))
+            .register(RpgItemRewardFactory(itemDefs, itemInstances, platform))
+            .register(BuffRewardFactory())
+            .register(PerkPointRewardFactory())
         questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
         val questDir = File(dataFolder, "quests")
         if (!questDir.exists()) questDir.mkdirs()
