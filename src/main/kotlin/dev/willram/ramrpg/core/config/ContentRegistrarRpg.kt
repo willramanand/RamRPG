@@ -87,7 +87,8 @@ class ContentRegistrarRpg(
          * [ItemDefinition]s through this exact mapping instead of forking a second one. This is the
          * seam WP-1.5b/2.1a left open (see their design notes): [spec]'s `effects`, `itemLevel`,
          * `requirements` and `equipSlots` are now copied onto the built definition, closing the gap
-         * that made HOCON/Kotlin parity impossible before this WP.
+         * that made HOCON/Kotlin parity impossible before this WP. WP-2.3b adds `damageSplit` to that
+         * same copy-through list.
          */
         fun buildItem(spec: ItemSpec, material: Material): ItemDefinition {
             val baseStats = spec.baseStats.map { (statKey, amount) ->
@@ -113,6 +114,9 @@ class ContentRegistrarRpg(
                 // ItemDefinition's own constructor default would compute, so an omitted override and an
                 // explicit one that happens to match the default are indistinguishable on the built definition.
                 equipSlots = spec.equipSlots ?: EquipSlotDefaults.forCategories(spec.categories),
+                // WP-2.3b: already validated (sum to 1.0, or empty) by ItemSpec.deserialize -- copied through
+                // unchanged, same as every other spec-side-validated field above.
+                damageSplit = spec.damageSplit,
             )
         }
     }

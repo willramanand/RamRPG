@@ -8,6 +8,7 @@ package dev.willram.ramrpg.api.items
 
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.Effect
+import dev.willram.ramrpg.api.identity.DamageTypeKey
 import dev.willram.ramrpg.api.identity.EnchantmentKey
 import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.SkillKey
@@ -446,6 +447,17 @@ data class ItemDefinition(
      * [EquipSlotDefaults]; pass explicitly to override (e.g. a trinket that occupies the off hand).
      */
     val equipSlots: Set<EquipmentSlot> = EquipSlotDefaults.forCategories(categories),
+    /**
+     * WP-2.3b: this weapon's declared damage-component split -- the fraction of its damage that lands
+     * as each [DamageTypeKey], consumed by [dev.willram.ramrpg.builtin.stats.ElementalBreakdownStage]
+     * instead of that stage's WP-2.3a all-physical default. [dev.willram.ramrpg.core.config.specs.ItemSpec]
+     * validates a non-empty split sums to `1.0` (within a small epsilon) at load time -- a partial or
+     * over-full split never reaches a built [ItemDefinition]. Empty (the default) means "no declared
+     * split", the same as an item that never set this field at all: [ElementalBreakdownStage] falls back
+     * to its existing all-physical seeding. A DEFINITION field, not an [ItemInstanceData] field -- see
+     * `docs/design/2.3a-damage-types.md`'s WP-2.3b append.
+     */
+    val damageSplit: Map<DamageTypeKey, Double> = emptyMap(),
 )
 
 /**

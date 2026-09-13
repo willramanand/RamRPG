@@ -43,13 +43,21 @@
  *   { type = perk_owned, perk = "ramrpg:dragon_slayer" }   # STUB until WP-5.1a -- see ItemRequirement.PerkOwned
  * ]
  * equip-slots = ["HAND"]                # optional; omit to use the category -> slot default
+ * damage-split { "ramrpg:physical" = 0.7, "ramrpg:fire" = 0.3 }   # optional; must sum to 1.0 (+/- epsilon)
  * ```
+ *
+ * WP-2.3b (now filled): weapons may also carry a `damage-split { <damageTypeId> = <fraction>, ... } ` map
+ * -- see [damageSplit]. Same seam shape as `effects`/`requirements` above: parsed and VALIDATED here
+ * (a present-but-wrong-sum split is a load-time [ContentDeserializeException], not a silently-accepted
+ * definition), but copying it onto the live [dev.willram.ramrpg.api.items.ItemDefinition.damageSplit]
+ * field is [ContentRegistrarRpg]'s job.
  */
 package dev.willram.ramrpg.core.config.specs
 
 import dev.willram.ramcore.content.ContentDeserializeException
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.Effect
+import dev.willram.ramrpg.api.identity.DamageTypeKey
 import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.StatKey
@@ -85,6 +93,12 @@ data class ItemSpec(
     val requirements: List<ItemRequirement> = emptyList(),
     /** WP-2.1a: explicit `equip-slots` override, or null when absent (defer to the category default). */
     val equipSlots: Set<EquipmentSlot>? = null,
+    /**
+     * WP-2.3b: parsed `damage-split = { <damageTypeId> = <fraction>, ... }`; empty when absent (the
+     * `ElementalBreakdownStage` all-physical default). [deserialize] validates a non-empty map sums to
+     * `1.0` within [DAMAGE_SPLIT_EPSILON] before this spec is ever constructed.
+     */
+    val damageSplit: Map<DamageTypeKey, Double> = emptyMap(),
 ) : RpgContentSpec {
     override val id: ContentId get() = key.id
 
@@ -107,6 +121,7 @@ data class ItemSpec(
                 itemLevel = SpecNodes.intOr(node, "item-level", 1),
                 requirements = requirements(node),
                 equipSlots = equipSlots(node),
+                damageSplit = damageSplit(node, id),
             )
         }
 
@@ -148,6 +163,33 @@ data class ItemSpec(
         private fun equipSlots(node: ConfigurationNode): Set<EquipmentSlot>? {
             if (node.node("equip-slots").virtual()) return null
             return SpecNodes.enumList<EquipmentSlot>(node, "equip-slots", "equipment slot").toSet()
+        }
+
+        /** Tolerance a `damage-split`'s fractions must sum to `1.0` within -- floating-point HOCON authoring slop. */
+        private const val DAMAGE_SPLIT_EPSILON = 0.0001
+
+        /**
+         * Parses `damage-split { "<damageTypeId>" = <fraction>, ... }` -> [DamageTypeKey] -> fraction.
+         * Absent -> empty map (the [ElementalBreakdownStage][dev.willram.ramrpg.builtin.stats.ElementalBreakdownStage]
+         * all-physical default). Present -> every fraction is read, then the map MUST sum to `1.0` within
+         * [DAMAGE_SPLIT_EPSILON] or this throws [ContentDeserializeException] naming [id] and the actual sum,
+         * so [dev.willram.ramcore.content.SpecLoader] tags it with the offending file + path (the same way
+         * [statRolls]' `min > max` check does for stat rolls).
+         */
+        private fun damageSplit(node: ConfigurationNode, id: ContentId): Map<DamageTypeKey, Double> {
+            val splitNode = node.node("damage-split")
+            if (splitNode.virtual()) return emptyMap()
+            val out = LinkedHashMap<DamageTypeKey, Double>()
+            splitNode.childrenMap().forEach { (rawKey, value) ->
+                out[DamageTypeKey(SpecNodes.parseId(rawKey.toString(), "damage-split key"))] = value.getDouble()
+            }
+            val total = out.values.sum()
+            if (kotlin.math.abs(total - 1.0) > DAMAGE_SPLIT_EPSILON) {
+                throw ContentDeserializeException(
+                    "damage-split for '$id' must sum to 1.0 but summed to $total",
+                )
+            }
+            return out
         }
     }
 }

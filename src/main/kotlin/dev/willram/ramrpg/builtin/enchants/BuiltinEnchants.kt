@@ -11,11 +11,14 @@ import dev.willram.ramrpg.api.effects.Scaling
 import dev.willram.ramrpg.api.effects.StatEffect
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.enchants.RPGEnchantment
+import dev.willram.ramrpg.api.identity.DamageTypeKey
 import dev.willram.ramrpg.api.identity.EffectKey
 import dev.willram.ramrpg.api.identity.EnchantmentKey
 import dev.willram.ramrpg.api.items.ItemCategory
 import dev.willram.ramrpg.api.stats.ModifierOperation
+import dev.willram.ramrpg.builtin.identity.BuiltinDamageTypes
 import dev.willram.ramrpg.builtin.identity.RamStats
+import dev.willram.ramrpg.builtin.stats.ElementalBreakdownStage
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
 
@@ -81,6 +84,35 @@ class Lifesteal : RPGEnchantment {
     )
 }
 
+/**
+ * WP-2.3b: the elemental enchant proof-of-concept -- adds a flat, per-level FIRE damage bonus on top of
+ * the hit's normal damage, exactly as `Sharpness` adds a flat physical bonus, but ALSO records that
+ * bonus into [DamageContext.metadata] under [ElementalBreakdownStage.ELEMENTAL_BONUS_METADATA_KEY] so
+ * `ElementalBreakdownStage` (priority 600, after this hook's ENCHANT_OFFENSE/300) folds it back in as a
+ * genuine [BuiltinDamageTypes.FIRE] component instead of it being absorbed into the weapon's own
+ * physical/split damage -- see that stage's KDoc and `docs/design/2.3a-damage-types.md`'s WP-2.3b append.
+ */
+class Flaming : RPGEnchantment {
+    override val key = ek("flaming")
+    override val displayName = Component.text("Flaming")
+    override val maxLevel = 3
+    override val targets = WEAPON_CATS
+    override fun effects(level: Int): List<Effect> = listOf(
+        DamagePipelineEffect(fk("flaming"), DamagePriority.ENCHANT_OFFENSE, object : DamageStageHook {
+            override fun apply(ctx: DamageContext) {
+                val bonus = level * 2.0
+                ctx.finalDamage += bonus
+
+                @Suppress("UNCHECKED_CAST")
+                val bonuses = ctx.metadata.getOrPut(ElementalBreakdownStage.ELEMENTAL_BONUS_METADATA_KEY) {
+                    mutableMapOf<DamageTypeKey, Double>()
+                } as MutableMap<DamageTypeKey, Double>
+                bonuses[BuiltinDamageTypes.FIRE] = (bonuses[BuiltinDamageTypes.FIRE] ?: 0.0) + bonus
+            }
+        })
+    )
+}
+
 class Power : RPGEnchantment {
     override val key = ek("power")
     override val displayName = Component.text("Power")
@@ -100,7 +132,7 @@ object BuiltinEnchants {
         val owner = "ramrpg-builtin"
         for (e in listOf(
             Sharpness(), Critical(), TrueStrike(), Ferocious(), Fortune(),
-            Protection(), Growth(), MendingHR(), Lifesteal(), Power(),
+            Protection(), Growth(), MendingHR(), Lifesteal(), Power(), Flaming(),
         )) reg.register(owner, e)
     }
 }
