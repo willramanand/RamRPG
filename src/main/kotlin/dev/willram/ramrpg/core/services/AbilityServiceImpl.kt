@@ -6,6 +6,10 @@ package dev.willram.ramrpg.core.services
 
 import dev.willram.ramcore.content.ContentKey
 import dev.willram.ramcore.content.ContentRegistry
+import dev.willram.ramcore.cooldown.Cooldown
+import dev.willram.ramcore.cooldown.CooldownKey
+import dev.willram.ramcore.cooldown.CooldownTracker
+import dev.willram.ramcore.cooldown.Cooldowns
 import dev.willram.ramrpg.api.abilities.Ability
 import dev.willram.ramrpg.api.abilities.AbilityContext
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
@@ -14,6 +18,7 @@ import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.abilities.AbilityTrigger
 import dev.willram.ramrpg.api.abilities.CooldownScope
 import dev.willram.ramrpg.api.abilities.ResourceCost
+import dev.willram.ramrpg.api.abilities.formatCooldown
 import dev.willram.ramrpg.api.identity.AbilityKey
 import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.XpSourceKey
@@ -23,7 +28,7 @@ import dev.willram.ramrpg.api.skills.XpSource
 import dev.willram.ramrpg.core.storage.PlayerStore
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
-import java.util.UUID
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 class AbilityRegistryImpl(
@@ -49,8 +54,29 @@ class AbilityServiceImpl(
     private val manaXpSkill: SkillKey,
 ) : AbilityService {
 
-    private data class CdKey(val player: UUID, val ability: AbilityKey, val scope: CooldownScope, val item: UUID?)
-    private val cooldowns = ConcurrentHashMap<CdKey, Long>()
+    // One RamCore CooldownTracker per ability (its base timeout is the ability's cooldown). The
+    // CooldownKey's second element is the scope discriminator: player uuid, item instance id, or a
+    // GLOBAL constant. Backs cooldowns with RamCore instead of a hand-rolled timestamp map.
+    private val trackers = ConcurrentHashMap<AbilityKey, CooldownTracker<CooldownKey>>()
+
+    private fun trackerFor(ab: Ability): CooldownTracker<CooldownKey> =
+        trackers.computeIfAbsent(ab.key) { Cooldowns.grouped(Cooldown.ofTicks(ab.cooldown.ticks)) }
+
+    private fun scopeKey(scope: CooldownScope, abilityId: String, player: Player, itemInstanceId: java.util.UUID?): CooldownKey =
+        when (scope) {
+            CooldownScope.PLAYER -> CooldownKey.of(abilityId, player.uniqueId)
+            CooldownScope.GLOBAL -> CooldownKey.of(abilityId, "global")
+            // A null instance id (assignInstanceId = false) falls back to the player key, never a shared null.
+            CooldownScope.ITEM -> CooldownKey.of(abilityId, itemInstanceId ?: player.uniqueId)
+        }
+
+    override fun remaining(player: Player, ability: AbilityKey): Duration {
+        val tracker = trackers[ability] ?: return Duration.ZERO
+        val ab = registry.get(ability) ?: return Duration.ZERO
+        // No item in hand is known at this entry point; ITEM scope uses the player fallback key.
+        val key = scopeKey(ab.cooldown.keyScope, ability.id.toString(), player, null)
+        return Duration.ofMillis(tracker.remainingMillis(key))
+    }
 
     override fun isDisabled(player: Player, ability: AbilityKey): Boolean =
         playerStore.require(player.uniqueId).disabledAbilities.contains(ability.id.toString())
@@ -63,7 +89,6 @@ class AbilityServiceImpl(
     }
 
     override fun tryFire(trigger: AbilityTrigger, ctx: AbilityContext): List<AbilityResult> {
-        val now = System.currentTimeMillis()
         val results = ArrayList<AbilityResult>()
         for (ab in registry.forTrigger(trigger)) {
             if (isDisabled(ctx.player, ab.key)) {
@@ -75,10 +100,11 @@ class AbilityServiceImpl(
                 results += AbilityResult.Fail(Component.text("Requires ${unlock.id.value()} ${ab.unlockLevel}"))
                 continue
             }
-            val cdKey = CdKey(ctx.player.uniqueId, ab.key, ab.cooldown.keyScope, null)
-            val readyAt = cooldowns[cdKey] ?: 0L
-            if (readyAt > now) {
-                results += AbilityResult.Fail(Component.text("On cooldown"))
+            val tracker = trackerFor(ab)
+            val cdKey = scopeKey(ab.cooldown.keyScope, ab.key.id.toString(), ctx.player, ctx.itemInstanceId)
+            if (tracker.peek(cdKey).denied()) {
+                val left = formatCooldown(Duration.ofMillis(tracker.remainingMillis(cdKey)))
+                results += AbilityResult.Fail(Component.translatable("ramrpg.ability.on_cooldown", Component.text(left)))
                 continue
             }
             if (ab.requirements.any { !it.met(ctx) }) {
@@ -94,7 +120,7 @@ class AbilityServiceImpl(
             data.currentMana -= manaCost
             val res = ab.execute(ctx)
             if (res is AbilityResult.Success) {
-                cooldowns[cdKey] = now + ab.cooldown.ticks * 50
+                tracker.test(cdKey) // start the cooldown from now
                 if (manaCost > 0) awardManaXp(ctx.player, ab.key, manaCost)
             } else if (res is AbilityResult.Fail) {
                 // refund mana on execute failure (e.g., wrong tool)

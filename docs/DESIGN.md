@@ -12,6 +12,10 @@ damage pipeline, and the dataVersion ledger.
 
 - [F5 — PlayerRpgData dataVersion ledger](design/F5-dataversion-ledger.md)
 
+## Phase 1
+
+- [1.3 — Ability cooldown scopes and persistence](design/1.3-cooldown-scopes.md)
+
 ## Phase 0 baseline
 
 - [0.1 — Stats and the damage pipeline](design/0.1-stats-and-pipeline.md)

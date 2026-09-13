@@ -14,6 +14,9 @@ import org.bukkit.entity.Entity
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import java.time.Duration
+import java.util.Locale
+import java.util.UUID
 
 sealed interface AbilityTrigger {
     data object RightClick : AbilityTrigger
@@ -43,6 +46,8 @@ interface AbilityContext {
     val item: ItemStack?
     val target: Entity?
     val damageVictim: LivingEntity?
+    /** Instance id of [item] when it is an RPG item, for [CooldownScope.ITEM] keying. Null falls back to PLAYER. */
+    val itemInstanceId: UUID? get() = null
 }
 
 sealed interface AbilityResult {
@@ -75,4 +80,20 @@ interface AbilityService {
     fun tryFire(trigger: AbilityTrigger, ctx: AbilityContext): List<AbilityResult>
     fun isDisabled(player: Player, ability: AbilityKey): Boolean
     fun setDisabled(player: Player, ability: AbilityKey, disabled: Boolean)
+    /**
+     * Time left on [ability]'s cooldown for [player], or [Duration.ZERO] if ready. For
+     * [CooldownScope.ITEM] this is the player-scoped fallback (no item in hand is known here).
+     */
+    fun remaining(player: Player, ability: AbilityKey): Duration
+}
+
+/** Renders a cooldown [Duration] for lore/HUD: "0s", "3.2s", "45s", "1m 5s". */
+fun formatCooldown(remaining: Duration): String {
+    val ms = remaining.toMillis()
+    return when {
+        ms <= 0L -> "0s"
+        ms >= 60_000L -> "${ms / 60_000L}m ${(ms % 60_000L) / 1000L}s"
+        ms >= 10_000L -> "${Math.round(ms / 1000.0)}s"
+        else -> String.format(Locale.ROOT, "%.1fs", ms / 1000.0)
+    }
 }

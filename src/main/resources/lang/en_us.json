@@ -1,4 +1,5 @@
 {
+  "ramrpg.ability.on_cooldown": "On cooldown ({0})",
   "ramrpg.stat.damage": "Damage",
   "ramrpg.stat.strength": "Strength",
   "ramrpg.stat.health": "Health",
