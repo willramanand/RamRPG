@@ -43,6 +43,17 @@ internal fun reforgeStatsFor(
     return out
 }
 
+/**
+ * The SINGLE stat path for reforges: reads [ItemInstanceData.reforge] off each equipped stack and folds
+ * the matching [dev.willram.ramrpg.api.reforges.ReforgeDefinition]'s bonuses in via [reforgeStatsFor].
+ *
+ * WP-3.3c (reforge-as-a-recipe): reforging is now a normal crafting recipe -- a
+ * [dev.willram.ramrpg.api.crafting.RecipeOutcome.Reforge] that the generic craft engine collapses to an
+ * [dev.willram.ramrpg.api.crafting.OutcomePlan.Modify] and writes to [ItemInstanceData.reforge]. That
+ * changes only HOW the field gets set (a recipe, not a bespoke command path); this provider is unchanged
+ * and stays the ONLY place reforge stats are produced, so a reforge applied by a recipe yields exactly
+ * the same stats it did before. See `docs/design/3.3c-reforge-costs.md`.
+ */
 class ReforgeStatProvider(
     private val items: ItemInstanceService,
     private val defs: ItemDefinitionRegistry,
