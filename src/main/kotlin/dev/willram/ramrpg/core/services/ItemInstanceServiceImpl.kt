@@ -74,18 +74,52 @@ class ItemInstanceServiceImpl(
             customRolls = rolledRolls,
             enchantments = init.enchantments,
             owner = init.owner,
+            // WP-2.1b: quality defaults to 0.5 for drops; an explicit init.quality (crafting, a later WP)
+            // both positions the rolls above (see rollStats) and is stored here. Durability/maxDurability
+            // seed to full via the ItemInstanceData defaults -- there is no definition-side durability
+            // field yet (ItemSpec untouched this WP), and DRAIN is WP-2.2.
+            quality = init.quality?.coerceIn(0.0, 1.0) ?: ItemInstanceData.DEFAULT_QUALITY,
         )
         return write(stack, data)
     }
 
-    /** Visible for testing. Deterministic when [ItemInstanceInit.rollSeed] set. */
+    /**
+     * Visible for testing. Rolls each [ItemDefinition.statRolls] entry into a concrete value.
+     *
+     * Precedence: an explicit [ItemInstanceInit.customRolls] wins; else, when [ItemInstanceInit.quality]
+     * is set, each roll is positioned DETERMINISTICALLY by quality via [qualityScaledRoll]
+     * (`min + quality*(max-min)`); else the historical RNG path applies, deterministic when
+     * [ItemInstanceInit.rollSeed] is set (pinned by `StatRollTest`).
+     */
     fun rollStats(def: ItemDefinition, init: ItemInstanceInit): Map<dev.willram.ramrpg.api.identity.StatKey, Double> {
         if (def.statRolls.isEmpty() || init.customRolls.isNotEmpty()) return init.customRolls
+        init.quality?.let { q ->
+            return def.statRolls.associate { roll -> roll.stat to qualityScaledRoll(roll.min, roll.max, q) }
+        }
         val rng = init.rollSeed?.let { java.util.Random(it) } ?: java.util.Random()
         return def.statRolls.associate { roll ->
             val v = if (roll.min == roll.max) roll.min
             else roll.min + rng.nextDouble() * (roll.max - roll.min)
             roll.stat to v
+        }
+    }
+
+    companion object {
+        /**
+         * WP-2.1b quality-scales-rolls formula. Quality `q` in `[0,1]` positions a stat roll
+         * DETERMINISTICALLY within its band:
+         *
+         *     qualityScaledRoll(min, max, q) = min + q * (max - min)
+         *
+         * so `q=0.0 -> min` (worst), `q=1.0 -> max` (best), `q=0.5 -> midpoint`. It is the same
+         * `[min,max]` line [rollStats]'s RNG samples with `rng.nextDouble()`, with quality supplying the
+         * position explicitly -- so a crafter's quality and a drop's seeded roll live on one axis, not
+         * two. Pure and deterministic (no RNG); `q` is coerced into `[0,1]`. See
+         * `docs/design/2.1b-quality-durability.md`.
+         */
+        fun qualityScaledRoll(min: Double, max: Double, quality: Double): Double {
+            val q = quality.coerceIn(0.0, 1.0)
+            return min + q * (max - min)
         }
     }
 
@@ -109,18 +143,33 @@ class ItemInstanceServiceImpl(
         val ench: Map<String, Int> = emptyMap(),
         val owner: String? = null,
         val cn: String? = null,
+        // WP-2.1b (schema v2). NULLABLE on purpose: Gson leaves an absent JSON field null (it does NOT
+        // run Kotlin constructor defaults), so a v1 blob -- which omits these keys -- deserializes with
+        // them null and toDomain() substitutes the ItemInstanceData schema defaults. That default-fill on
+        // read is exactly why ItemSchemaMigrator stays a no-op (no V1->V2 engine, no fixture test).
+        val q: Double? = null,
+        val cb: String? = null,
+        val mdur: Int? = null,
+        val dur: Int? = null,
     ) {
         fun toJson(): String = GSON.toJson(this)
-        fun toDomain(): ItemInstanceData = ItemInstanceData(
-            identity = ItemIdentity(ItemKey(ContentId.parse(k)), iid?.let(UUID::fromString), v),
-            upgradeLevel = u,
-            reforge = r?.let { ReforgeKey(ContentId.parse(it)) },
-            sockets = s.map { SocketData(ContentId.parse(it.k), it.g?.let(ContentId::parse)) },
-            customRolls = rolls.mapKeys { (k, _) -> StatKey(ContentId.parse(k)) },
-            enchantments = ench.mapKeys { (k, _) -> EnchantmentKey(ContentId.parse(k)) },
-            owner = owner?.let(UUID::fromString),
-            customName = cn,
-        )
+        fun toDomain(): ItemInstanceData {
+            val maxDur = mdur ?: ItemInstanceData.DEFAULT_MAX_DURABILITY
+            return ItemInstanceData(
+                identity = ItemIdentity(ItemKey(ContentId.parse(k)), iid?.let(UUID::fromString), v),
+                upgradeLevel = u,
+                reforge = r?.let { ReforgeKey(ContentId.parse(it)) },
+                sockets = s.map { SocketData(ContentId.parse(it.k), it.g?.let(ContentId::parse)) },
+                customRolls = rolls.mapKeys { (k, _) -> StatKey(ContentId.parse(k)) },
+                enchantments = ench.mapKeys { (k, _) -> EnchantmentKey(ContentId.parse(k)) },
+                owner = owner?.let(UUID::fromString),
+                customName = cn,
+                quality = q ?: ItemInstanceData.DEFAULT_QUALITY,
+                craftedBy = cb?.let(UUID::fromString),
+                maxDurability = maxDur,
+                durability = dur ?: maxDur,
+            )
+        }
         companion object {
             private val GSON = com.google.gson.Gson()
             fun parse(json: String): ItemDto? = runCatching { GSON.fromJson(json, ItemDto::class.java) }.getOrNull()
@@ -135,6 +184,10 @@ class ItemInstanceServiceImpl(
                 ench = d.enchantments.mapKeys { (k, _) -> k.id.toString() },
                 owner = d.owner?.toString(),
                 cn = d.customName,
+                q = d.quality,
+                cb = d.craftedBy?.toString(),
+                mdur = d.maxDurability,
+                dur = d.durability,
             )
         }
     }
@@ -142,9 +195,21 @@ class ItemInstanceServiceImpl(
     data class SocketDto(val k: String, val g: String? = null)
 }
 
+/**
+ * Hook for transforming a parsed [ItemInstanceServiceImpl.ItemDto] before it becomes domain data.
+ *
+ * WP-2.1b deliberately keeps this a DOCUMENTED NO-OP. RamRPG is in-house and deploys to fresh servers,
+ * so there is no old PDC data to migrate: the schema v1 -> v2 bump (quality / craftedBy / durability)
+ * ships WITHOUT a migration engine and WITHOUT a checked-in v1 fixture test, per the standing
+ * fresh-server / no-migration policy. The new v2 fields are simply absent from a v1 blob and fill from
+ * the [dev.willram.ramrpg.api.items.ItemInstanceData] schema defaults inside
+ * [ItemInstanceServiceImpl.ItemDto.toDomain] (nullable DTO fields -> defaults), so no default-filling
+ * pass belongs here either. This seam remains only so a genuine future migration has a home.
+ */
 interface ItemSchemaMigrator {
     fun migrate(dto: ItemInstanceServiceImpl.ItemDto): ItemInstanceServiceImpl.ItemDto
     companion object {
+        /** The documented no-op (see the interface KDoc): returns the DTO unchanged. */
         val NOOP: ItemSchemaMigrator = object : ItemSchemaMigrator {
             override fun migrate(dto: ItemInstanceServiceImpl.ItemDto) = dto
         }
