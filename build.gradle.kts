@@ -31,7 +31,7 @@ plugins {
 apply(plugin = "com.gradleup.shadow")
 
 group = "dev.willram"
-version = "2.0.0"
+version = "2.1.0-SNAPSHOT"
 
 val paperVersion = "26.1.2.build.60-stable"
 val junitVersion = "5.11.4"
@@ -86,6 +86,14 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+// Filter the plugin version into paper-plugin.yml from the Gradle version. Scoped to that one file
+// so Groovy templating never touches lang/*.json or content/*.conf (which contain literal '$'/'{').
+tasks.processResources {
+    filesMatching("paper-plugin.yml") {
+        expand("project" to project)
+    }
 }
 
 // The shaded jar is the deliverable; disable the thin jar so both do not claim the same filename.
