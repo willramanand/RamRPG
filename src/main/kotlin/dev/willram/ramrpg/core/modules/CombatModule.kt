@@ -34,13 +34,16 @@ class CombatModule(private val ctx: ServiceContext) : TerminableModule {
         val pipeline = ctx.service(RpgServiceKeys.DAMAGE_PIPELINE)
         val stats = ctx.service(RpgServiceKeys.STATS)
         val itemInstances = ctx.service(RpgServiceKeys.ITEM_INSTANCES)
+        val itemDefs = ctx.service(RpgServiceKeys.ITEM_DEFINITIONS)
         val enchantments = ctx.service(RpgServiceKeys.ENCHANTMENTS)
 
         pipeline.register(WeaponBaseStage(stats))
         pipeline.register(StrengthStage(stats))
         pipeline.register(EnchantDamageStage(itemInstances, enchantments, DamagePriority.ENCHANT_OFFENSE, true))
         pipeline.register(CritRollStage(stats))
-        pipeline.register(ElementalBreakdownStage())
+        // WP-2.3b: resolves DamageContext.weapon -> ItemDefinition.damageSplit through these two
+        // registries -- see ElementalBreakdownStage's KDoc for why both are nullable/optional.
+        pipeline.register(ElementalBreakdownStage(itemInstances, itemDefs))
         pipeline.register(ResistancesStage(stats))
         pipeline.register(ArmorMitigationStage(stats))
         pipeline.register(TrueDefenseStage(stats))
