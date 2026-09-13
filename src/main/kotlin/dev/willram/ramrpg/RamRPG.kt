@@ -230,7 +230,10 @@ class RamRPG : RamPlugin() {
         FortuneListener(service(RpgServiceKeys.STATS)).register(this)
         NonCombatXpListener(service(RpgServiceKeys.SKILL_SERVICE)).register(this)
         EnchantingListener(service(RpgServiceKeys.ENCHANTMENTS), service(RpgServiceKeys.ITEM_INSTANCES), service(RpgServiceKeys.ITEM_DEFINITIONS)).register(this)
-        DurabilityListener().register(this)
+        // WP-2.2: pass the instance service so ONLY RPG items get their vanilla PlayerItemDamageEvent
+        // cancelled (non-RPG items keep vanilla durability). Argless = blanket-cancel-everything fallback.
+        // (Orchestrator bootstrap wiring at merge — this listener is constructed here, not in a module.)
+        DurabilityListener(service(RpgServiceKeys.ITEM_INSTANCES)).register(this)
         InventoryRefreshListener(service(RpgServiceKeys.PLATFORM)).register(this)
 
         skillsCommand = SkillsCommand(

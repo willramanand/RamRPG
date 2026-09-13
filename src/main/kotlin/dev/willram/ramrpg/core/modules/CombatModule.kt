@@ -16,6 +16,7 @@ import dev.willram.ramrpg.builtin.stats.ApplyStage
 import dev.willram.ramrpg.builtin.stats.ArmorMitigationStage
 import dev.willram.ramrpg.builtin.stats.CritRollStage
 import dev.willram.ramrpg.builtin.stats.DamageIndicatorStage
+import dev.willram.ramrpg.builtin.stats.DurabilityDrainStage
 import dev.willram.ramrpg.builtin.stats.ElementalBreakdownStage
 import dev.willram.ramrpg.builtin.stats.EnchantDamageStage
 import dev.willram.ramrpg.builtin.stats.EnchantPostHitStage
@@ -26,6 +27,7 @@ import dev.willram.ramrpg.builtin.stats.StrengthStage
 import dev.willram.ramrpg.builtin.stats.TrueDefenseStage
 import dev.willram.ramrpg.builtin.stats.WeaponBaseStage
 import dev.willram.ramrpg.core.listeners.CombatListener
+import dev.willram.ramrpg.core.services.DurabilityService
 import dev.willram.ramrpg.core.services.RpgServiceKeys
 
 class CombatModule(private val ctx: ServiceContext) : TerminableModule {
@@ -53,6 +55,11 @@ class CombatModule(private val ctx: ServiceContext) : TerminableModule {
         pipeline.register(FerocityStage(stats))
         pipeline.register(DamageIndicatorStage())
         pipeline.register(ApplyStage())
+        // WP-2.2: durability drain lives at the same APPLY priority as ApplyStage -- see
+        // docs/design/2.2-durability.md. Registered here (not RamRPG.kt, per rule 8/B5) because this
+        // module already resolves itemInstances from the ServiceContext; DurabilityService is stateless
+        // so it needs no service-graph entry of its own.
+        pipeline.register(DurabilityDrainStage(itemInstances, DurabilityService()))
 
         CombatListener(pipeline).register(consumer)
     }
