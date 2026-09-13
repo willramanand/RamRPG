@@ -79,6 +79,7 @@ import dev.willram.ramrpg.core.services.ItemDefinitionRegistryImpl
 import dev.willram.ramrpg.core.services.ItemInstanceServiceImpl
 import dev.willram.ramrpg.core.services.ReforgeRegistryImpl
 import dev.willram.ramrpg.core.services.ReforgeStatProvider
+import dev.willram.ramrpg.core.services.RpgServiceKeys
 import dev.willram.ramrpg.core.services.SkillRegistryImpl
 import dev.willram.ramrpg.core.services.SkillServiceImpl
 import dev.willram.ramrpg.core.services.SkillStatProvider
@@ -160,12 +161,19 @@ class RamRPG : RamPlugin() {
         )
         playerData.register(FilePlayerStore.RPG_KEY, store)
         playerStore = FilePlayerStore(playerData)
-    }
 
-    override fun enable() {
-        Translations.load(this)
+        // WP-1.7a: the RPG subsystem services are constructed here -- not in enable() -- because
+        // RamCore's SimpleServiceRegistry (services().register(...)) refuses registration once
+        // loadAll() has run, and RamPlugin#onLoad calls loadAll() immediately after this method
+        // returns. Construction itself is unchanged (same classes, same arguments, same order); only
+        // the timing moved from onEnable to onLoad. None of these constructors touch the Bukkit
+        // runtime or other plugins' enabled state (mythicMobsEnabled/MythicIntegration only check
+        // plugin *presence*, which is already known at load time, same as above).
+        //
+        // Content registration (registerBuiltins/applyContentOverrides), stat providers, damage
+        // stages, and listener registration all still happen in enable(), where they belong: Bukkit
+        // forbids registering listeners before a plugin is enabled.
         platform = RamCorePlatformScheduler()
-
         stats = StatServiceImpl()
         skillRegistry = SkillRegistryImpl()
         skillService = SkillServiceImpl(
@@ -192,6 +200,48 @@ class RamRPG : RamPlugin() {
         reforges = ReforgeRegistryImpl()
         gems = GemRegistryImpl()
         renderer = PacketItemRendererImpl(itemDefs, itemInstances, stats, enchantments, reforges, gems)
+
+        // economy is Vault-free at construction time (its Vault-backed properties are `by lazy` and
+        // stay unevaluated until first use in enable()/later); questRegistry and quests are pure
+        // in-memory/file wiring, same as the player-data store above.
+        economy = EconomyService()
+        questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
+        val questDir = File(dataFolder, "quests")
+        if (!questDir.exists()) questDir.mkdirs()
+        quests = dev.willram.ramrpg.core.services.QuestService(questRegistry, skillService, economy, playerStore, questDir.toPath())
+
+        registerServices()
+    }
+
+    /**
+     * Registers every RPG subsystem service under its [RpgServiceKeys] key. Must run from [load]
+     * (see the comment there) -- RamCore's registry rejects `register(...)` once `loadAll()` has run.
+     * `rewardFactories` is intentionally excluded; see [RpgServiceKeys]'s class doc.
+     */
+    private fun registerServices() {
+        val registry = services()
+        registry.register(RpgServiceKeys.PLATFORM, platform)
+        registry.register(RpgServiceKeys.PLAYER_STORE, playerStore)
+        registry.register(RpgServiceKeys.STATS, stats)
+        registry.register(RpgServiceKeys.SKILL_REGISTRY, skillRegistry)
+        registry.register(RpgServiceKeys.SKILL_SERVICE, skillService)
+        registry.register(RpgServiceKeys.ITEM_DEFINITIONS, itemDefs)
+        registry.register(RpgServiceKeys.ITEM_INSTANCES, itemInstances)
+        registry.register(RpgServiceKeys.ENCHANTMENTS, enchantments)
+        registry.register(RpgServiceKeys.ENTITY_PROFILES, entityProfiles)
+        registry.register(RpgServiceKeys.ABILITIES, abilities)
+        registry.register(RpgServiceKeys.ABILITY_SERVICE, abilityService)
+        registry.register(RpgServiceKeys.DAMAGE_PIPELINE, damagePipeline)
+        registry.register(RpgServiceKeys.RENDERER, renderer)
+        registry.register(RpgServiceKeys.REFORGES, reforges)
+        registry.register(RpgServiceKeys.GEMS, gems)
+        registry.register(RpgServiceKeys.ECONOMY, economy)
+        registry.register(RpgServiceKeys.QUEST_REGISTRY, questRegistry)
+        registry.register(RpgServiceKeys.QUESTS, quests)
+    }
+
+    override fun enable() {
+        Translations.load(this)
 
         registerBuiltins()
         applyContentOverrides()
@@ -275,16 +325,15 @@ class RamRPG : RamPlugin() {
     private fun registerListeners() {
         equipmentListener = EquipmentListener(stats).also { it.register() }
         CombatListener(damagePipeline).register()
-        economy = EconomyService()
+        // economy/questRegistry/quests are constructed (and registered under RpgServiceKeys) in
+        // load() -- see the comment there. rewardFactories stays here: it must evaluate
+        // economy.ramCoreEconomy (a lazy Vault probe) after Vault has had a chance to enable, which
+        // load() runs too early for.
         rewardFactories = RewardActionFactories.standard(economy.ramCoreEconomy)
             .register(SkillXpRewardFactory(skillService, platform))
             .register(RpgItemRewardFactory(itemDefs, itemInstances, platform))
             .register(BuffRewardFactory())
             .register(PerkPointRewardFactory())
-        questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
-        val questDir = File(dataFolder, "quests")
-        if (!questDir.exists()) questDir.mkdirs()
-        quests = dev.willram.ramrpg.core.services.QuestService(questRegistry, skillService, economy, playerStore, questDir.toPath())
         dev.willram.ramrpg.builtin.quests.BuiltinQuests.registerAll(questRegistry)
         quests.registerObjectives()
         XpListener(entityProfiles, skillService, economy).register()
