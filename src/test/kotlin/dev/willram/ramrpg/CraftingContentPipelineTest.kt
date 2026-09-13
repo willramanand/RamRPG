@@ -49,6 +49,7 @@ import java.nio.file.Path
 class CraftingContentPipelineTest {
 
     private val smithing = StationKey.of("ramrpg", "smithing")
+    private val craftingBench = StationKey.of("ramrpg", "crafting_bench")
 
     /** Extracts the shipped crafting pack into [dir] exactly as ContentModule does, then loads it. */
     private fun loadPackagedCrafting(dir: Path): RpgContentLoadResult {
@@ -63,11 +64,19 @@ class CraftingContentPipelineTest {
         val result = loadPackagedCrafting(dir)
 
         assertTrue(result.errors().isEmpty(), "shipped crafting pack must parse clean: ${result.errors()}")
-        assertEquals(listOf(smithing), result.stations.map { it.key }, "the smithing station must load")
+        assertEquals(
+            setOf(smithing, craftingBench), result.stations.map { it.key }.toSet(),
+            "the smithing table + crafting bench stations must load",
+        )
         assertTrue(result.recipes.isNotEmpty(), "recipes/ must load recipe specs")
         assertTrue(
-            result.recipes.all { it.station == smithing },
-            "every shipped recipe binds to the smithing station",
+            result.recipes.all { it.station == smithing || it.station == craftingBench },
+            "every shipped recipe binds to a shipped station",
+        )
+        // WP-3.1e: the `new_item` refine recipes bind to the crafting bench (NEW_ITEM is DISALLOWED at smithing).
+        assertTrue(
+            result.recipes.filter { it.outcome is RecipeOutcome.NewItem }.all { it.station == craftingBench },
+            "refine (new_item) recipes bind to the crafting bench, not smithing",
         )
         // A representative recipe of each shipped outcome family parsed.
         val outcomes = result.recipes.map { it.outcome::class }.toSet()
@@ -115,10 +124,18 @@ class CraftingContentPipelineTest {
         assertTrue(recipes.all().isNotEmpty(), "recipes must be registered")
         assertTrue(recipes.forStation(smithing).isNotEmpty(), "forStation must find the shipped recipes")
 
+        // WP-3.1e: the crafting bench resolved too, permitting exactly the item-creating kinds.
+        val bench = stations.get(craftingBench)
+        assertNotNull(bench, "the crafting bench station must be registered")
+        bench!!
+        val craftingTable = ProxyFakes.proxy(Block::class.java, mapOf("getType" to Material.CRAFTING_TABLE))
+        assertTrue(bench.blockMatcher.matches(craftingTable), "bench matcher must match CRAFTING_TABLE")
+        assertEquals(setOf(RecipeOutcomeKind.NEW_ITEM, RecipeOutcomeKind.TRANSMUTE), bench.permittedKinds)
+
         val refine = recipes.get(RecipeKey.of("ramrpg", "refine_copper_ore"))
         assertNotNull(refine, "a shipped refine recipe must be registered")
         refine!!
-        assertEquals(smithing, refine.station)
+        assertEquals(craftingBench, refine.station, "WP-3.1e: refine recipes are re-pointed to the crafting bench")
         assertNotNull(stations.get(refine.station), "the recipe's station must be a registered Station")
         assertTrue(refine.inputs.any { it is Ingredient.Item }, "the tiered ore input resolves to Ingredient.Item")
         assertTrue(refine.inputs.any { it is Ingredient.MaterialTag }, "the fuel catalyst resolves to a MaterialTag")

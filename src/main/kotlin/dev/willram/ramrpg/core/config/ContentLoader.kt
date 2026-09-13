@@ -238,6 +238,9 @@ object RpgContentLoader {
         "recipes/reforge.conf",
         "recipes/sockets.conf",
         "stations/smithing.conf",
+        // WP-3.1e: the crafting bench (permits NEW_ITEM/TRANSMUTE) so the refine recipes in
+        // recipes/materials.conf -- re-pointed here from smithing -- are craftable, not DISALLOWED_OUTCOME.
+        "stations/crafting_bench.conf",
     )
 
     /**
