@@ -18,6 +18,7 @@ damage pipeline, and the dataVersion ledger.
 - [1.2a — Quest model and objective mapping](design/1.2a-quest-objectives.md)
 - [1.2b — Reward types and parameters](design/1.2b-reward-types.md)
 - [1.3 — Ability cooldown scopes and persistence](design/1.3-cooldown-scopes.md)
+- [1.5a — Content schema: file layout and type map](design/1.5a-content-schema.md)
 - [1.6a — HUD composition order and slot budget](design/1.6a-hud-composition.md)
 - [1.7b — Service graph, module seams and construction order](design/1.7b-service-graph.md)
 
