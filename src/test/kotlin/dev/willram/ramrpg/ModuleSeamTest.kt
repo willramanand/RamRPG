@@ -5,7 +5,6 @@ import dev.willram.ramcore.terminable.module.TerminableModule
 import dev.willram.ramcore.testkit.TestServiceContext
 import dev.willram.ramrpg.core.modules.BossModule
 import dev.willram.ramrpg.core.modules.BuffModule
-import dev.willram.ramrpg.core.modules.CraftingModule
 import dev.willram.ramrpg.core.modules.DungeonModule
 import dev.willram.ramrpg.core.modules.PerkModule
 import dev.willram.ramrpg.core.modules.RpgModules
@@ -24,20 +23,20 @@ import org.junit.jupiter.api.Test
  * Bukkit) is not invoked.
  *
  * Populated seams grow as later WPs fill them: WP-1.7b shipped six (Loot/Quest/Reward/Combat/Economy/Ui),
- * WP-1.5a added ContentModule (HOCON ContentLoader), WP-5.3 added SetModule (armor sets), and WP-6.2
- * added MobModule (region level bands -- docs/design/6.2-level-bands.md). Nine populated, seven seeded
- * empty. Each populated seam's `setup()` resolves real services / touches Bukkit, so it is exercised
- * here only via construction, never via `setup()`.
+ * WP-1.5a added ContentModule (HOCON ContentLoader), WP-5.3 added SetModule (armor sets), WP-6.2
+ * added MobModule (region level bands -- docs/design/6.2-level-bands.md), and WP-3.1b added CraftingModule
+ * (station GUI + generic craft engine). Ten populated, six seeded empty. Each populated seam's `setup()`
+ * resolves real services / touches Bukkit, so it is exercised here only via construction, never via `setup()`.
  */
 class ModuleSeamTest {
 
     private val expectedPopulated = setOf(
         "LootModule", "QuestModule", "RewardModule", "CombatModule", "EconomyModule", "UiModule",
-        "ContentModule", "SetModule", "MobModule",
+        "ContentModule", "SetModule", "MobModule", "CraftingModule",
     )
 
     private val expectedEmpty = setOf(
-        "CraftingModule", "BuffModule", "PerkModule",
+        "BuffModule", "PerkModule",
         "BossModule", "VendorModule", "DungeonModule", "ScheduleModule",
     )
 
@@ -46,25 +45,25 @@ class ModuleSeamTest {
         val modules = RpgModules.all(TestServiceContext.withRegistry())
         val names = modules.map { it::class.simpleName }
 
-        assertEquals(16, modules.size, "expected 9 populated + 7 seeded-empty module seams")
+        assertEquals(16, modules.size, "expected 10 populated + 6 seeded-empty module seams")
         assertEquals(names.size, names.toSet().size, "no module may be bound (listed) twice")
         assertEquals(expectedPopulated + expectedEmpty, names.toSet(), "module set must equal the reserved list")
     }
 
     @Test
-    fun `the split is nine populated and seven seeded-empty seams`() {
+    fun `the split is ten populated and six seeded-empty seams`() {
         val names = RpgModules.all(TestServiceContext.withRegistry()).map { it::class.simpleName }.toSet()
         assertEquals(expectedPopulated, names intersect expectedPopulated)
         assertEquals(expectedEmpty, names intersect expectedEmpty)
-        assertEquals(9, expectedPopulated.size)
-        assertEquals(7, expectedEmpty.size)
+        assertEquals(10, expectedPopulated.size)
+        assertEquals(6, expectedEmpty.size)
     }
 
     @Test
     fun `seeded-empty modules bind nothing`() {
         val ctx = TestServiceContext.withRegistry()
         val emptyModules: List<TerminableModule> = listOf(
-            CraftingModule(ctx), BuffModule(ctx), PerkModule(ctx),
+            BuffModule(ctx), PerkModule(ctx),
             BossModule(ctx), VendorModule(ctx), DungeonModule(ctx), ScheduleModule(ctx),
         )
         for (module in emptyModules) {

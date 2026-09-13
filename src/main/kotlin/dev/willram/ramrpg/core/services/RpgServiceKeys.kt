@@ -24,6 +24,9 @@ import dev.willram.ramcore.service.ServiceKey
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.combat.DamagePipeline
+import dev.willram.ramrpg.api.crafting.CraftingService
+import dev.willram.ramrpg.api.crafting.RecipeRegistry
+import dev.willram.ramrpg.api.crafting.StationRegistry
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
@@ -61,6 +64,26 @@ object RpgServiceKeys {
     val ECONOMY: ServiceKey<EconomyService> = ServiceKey.of("rpg-economy", EconomyService::class.java)
     val QUEST_REGISTRY: ServiceKey<QuestRegistry> = ServiceKey.of("rpg-quest-registry", QuestRegistry::class.java)
     val QUESTS: ServiceKey<QuestService> = ServiceKey.of("rpg-quests", QuestService::class.java)
+
+    // WP-3.1b: the crafting subsystem keys (RecipeRegistry / StationRegistry / CraftingService).
+    //
+    // These are DECLARED here (typed, house-style ServiceKey.of ids) but are deliberately NOT part of
+    // [all]. Unlike the 18 above -- which [dev.willram.ramrpg.RamRPG.load] constructs and registers into
+    // the RamCore ServiceRegistry, and which [RpgServiceGraph] + ServiceWiringTest/ServiceRegistrationOrderTest
+    // enumerate as exactly that load()-time set -- the crafting trio is constructed in
+    // [dev.willram.ramrpg.core.modules.CraftingModule.setup] (during enable(), i.e. AFTER load()).
+    // RamCore's SimpleServiceRegistry refuses register(...) once loadAll() has run (RamPlugin#onLoad runs
+    // it right after load() returns; see ServiceWiringTest's "registration after loadAll is rejected"),
+    // so a module CANNOT register them into the ServiceRegistry, and this WP may not touch RamRPG.kt (B5).
+    // Adding them to [all] would therefore (a) break those wiring tests' exact-18 assertions and (b) claim
+    // a load()-time registration that does not exist. Instead CraftingModule wires them locally (the
+    // SetRegistry precedent). To expose them via ServiceContext for downstream WPs (3.1c/3.3a/c/d), the
+    // orchestrator promotes their construction into load()/registerServices at merge -- the same
+    // merge-time RamRPG.kt seam WP-2.1c's providers use -- at which point they join [all], [RpgServiceGraph]
+    // and the wiring tests. See the WP-3.1b report's content-pipeline gap.
+    val RECIPE_REGISTRY: ServiceKey<RecipeRegistry> = ServiceKey.of("rpg-recipe-registry", RecipeRegistry::class.java)
+    val STATION_REGISTRY: ServiceKey<StationRegistry> = ServiceKey.of("rpg-station-registry", StationRegistry::class.java)
+    val CRAFTING_SERVICE: ServiceKey<CraftingService> = ServiceKey.of("rpg-crafting-service", CraftingService::class.java)
 
     /** Every declared key, for wiring diagnostics and tests. */
     fun all(): Set<ServiceKey<*>> = setOf(
