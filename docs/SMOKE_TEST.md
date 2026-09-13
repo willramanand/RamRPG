@@ -35,6 +35,7 @@ Run each in-game as an op. `[P]` = Paper expectation, `[F]` = Folia expectation.
 | 5 | Mob stats scale by spawn location | spawn/kill a mob in a level band | Mob HP/damage scale with the resolved band; loot/XP scale too | same; band resolved once at spawn, cached on the entity | ☐ |
 | 6 | Loot drops with rolled stats | kill an RPG mob | Drops resolve from the RamCore `LootTable`; item carries rolled stats and a stable seed | same; drop grant runs on the killer/entity context | ☐ |
 | 7 | Skills tree GUI | `/skills` tree view | Paginated skill tree opens through the RamCore menu; navigation works; no legacy `menu.Gui` | same; menu handled on the player thread | ☐ |
+| 8 | Requirement-gated equipment goes inert below level (WP-2.1c) | equip an item whose `requirements` you don't meet | Item equips but contributes no stats (equipment/enchant/reforge/socket) and its lore shows the unmet requirement(s) in red plus an inert banner; meeting the requirement later (e.g. leveling the skill) and re-equipping restores full stats | same; the equipment-change stat refresh runs on the player's region thread | ☐ |
 
 ## Cross-cutting checks
 

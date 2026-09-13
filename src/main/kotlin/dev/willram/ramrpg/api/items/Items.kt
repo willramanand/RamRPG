@@ -70,6 +70,24 @@ fun ItemRequirement.isMet(state: ItemRequirementState): Boolean = when (this) {
 }
 
 /**
+ * WP-2.1c: why an item instance is inert (contributes no stats from any item-based
+ * [dev.willram.ramrpg.api.stats.StatProvider]). See `docs/design/2.1c-inert-items.md` for the single
+ * check ([ItemDefinition.inertReason]) every such provider must consult.
+ */
+enum class InertReason {
+    /** At least one [ItemDefinition.requirements] entry is [isMet] `false` against the wearer's state. */
+    UNMET_REQUIREMENT,
+
+    /**
+     * [ItemInstanceData.durability] has reached `0`. The field exists since WP-2.1b and this WP wires the
+     * inert consequence, but nothing drains durability yet -- WP-2.2 owns the drain-on-hit mechanic. It
+     * must NOT re-define what "inert" means; it only needs to make durability reach `<= 0` in the first
+     * place for this reason to ever fire in practice.
+     */
+    ZERO_DURABILITY,
+}
+
+/**
  * WP-2.1a: the default [EquipmentSlot] each [ItemCategory] occupies when equipped -- see
  * `docs/design/2.1a-item-level-requirements.md` for the full table and rationale.
  * [ItemCategory.MISC] and [ItemCategory.ENCHANTED_BOOK] have no default slot (not directly equippable);
@@ -183,6 +201,16 @@ data class LoreContext(
     val statFormatLookup: (StatKey) -> StatFormat = { StatFormat.WHOLE },
     val reforgeNameLookup: (ReforgeKey) -> Component? = { null },
     val gemNameLookup: (ContentId) -> Component? = { null },
+    /** WP-2.1c: display name for a [SkillKey] referenced by an [ItemRequirement.SkillLevel]. */
+    val skillNameLookup: (SkillKey) -> Component? = { null },
+    /**
+     * WP-2.1c: the viewer's [ItemRequirementState], used by [LoreSection.Requirements] to render each
+     * requirement as met/unmet. `null` (the default -- no caller populates this yet; see
+     * `docs/design/2.1c-inert-items.md`'s wiring-gap note) renders every requirement as unmet, matching
+     * this WP's fail-closed default elsewhere: a requirement line must never look silently satisfied just
+     * because the real state wasn't wired in.
+     */
+    val requirementState: ItemRequirementState? = null,
 ) {
     /** Resolves a Component through viewer locale via Adventure GlobalTranslator. */
     fun localize(c: Component): Component {
@@ -201,6 +229,12 @@ sealed interface LoreSection {
     data object EffectsHint : LoreSection { override fun render(ctx: LoreContext) = LoreRender.effectsHint(ctx) }
     data object ReforgeLine : LoreSection { override fun render(ctx: LoreContext) = LoreRender.reforge(ctx) }
     data object SocketsLine : LoreSection { override fun render(ctx: LoreContext) = LoreRender.sockets(ctx) }
+    /** WP-2.1c: one line per [ItemDefinition.requirements] entry (met/unmet styling), plus an inert banner. */
+    data object Requirements : LoreSection { override fun render(ctx: LoreContext) = LoreRender.requirements(ctx) }
+    /** WP-2.1c: the [ItemDefinition.itemLevel] line. */
+    data object ItemLevel : LoreSection { override fun render(ctx: LoreContext) = LoreRender.itemLevel(ctx) }
+    /** WP-2.1c: the current/max [ItemInstanceData] durability line, plus an inert banner at zero. */
+    data object Durability : LoreSection { override fun render(ctx: LoreContext) = LoreRender.durability(ctx) }
     data object RarityLine : LoreSection { override fun render(ctx: LoreContext) = LoreRender.rarity(ctx) }
     data class Static(val lines: List<Component>) : LoreSection { override fun render(ctx: LoreContext) = lines }
     data class Conditional(val cond: (LoreContext) -> Boolean, val inner: LoreSection) : LoreSection {
@@ -277,12 +311,83 @@ internal object LoreRender {
         }
     }
 
+    /** WP-2.1c: one line per requirement, colored by [ItemRequirement.isMet] against [LoreContext.requirementState]. */
+    fun requirements(ctx: LoreContext): List<Component> {
+        val reqs = ctx.definition.requirements
+        if (reqs.isEmpty()) return emptyList()
+        val state = ctx.requirementState
+        val out = ArrayList<Component>(reqs.size + 1)
+        var anyUnmet = false
+        for (req in reqs) {
+            // No state wired (see LoreContext.requirementState KDoc) renders as unmet -- fail closed,
+            // never a silently-satisfied requirement line.
+            val met = state != null && req.isMet(state)
+            if (!met) anyUnmet = true
+            out += Component.text("").append(requirementLabel(ctx, req)).color(if (met) NamedTextColor.GREEN else NamedTextColor.RED)
+        }
+        if (anyUnmet) out += inertBanner(ctx)
+        return out
+    }
+
+    private fun requirementLabel(ctx: LoreContext, req: ItemRequirement): Component = when (req) {
+        is ItemRequirement.SkillLevel -> {
+            val name = ctx.localize(ctx.skillNameLookup(req.skill) ?: Component.text(req.skill.id.value()))
+            ctx.localize(Component.translatable("ramrpg.item.requirement.skill_level", name, Component.text(req.level)))
+        }
+        is ItemRequirement.StatThreshold -> {
+            val name = ctx.localize(ctx.statNameLookup(req.stat) ?: Component.text(req.stat.id.value()))
+            ctx.localize(Component.translatable(
+                "ramrpg.item.requirement.stat_threshold",
+                name,
+                Component.text(ctx.statFormatLookup(req.stat).format(req.min)),
+            ))
+        }
+        is ItemRequirement.PerkOwned ->
+            ctx.localize(Component.translatable("ramrpg.item.requirement.perk_owned", Component.text(req.perk.value())))
+    }
+
+    private fun inertBanner(ctx: LoreContext): Component =
+        ctx.localize(Component.translatable("ramrpg.item.inert")).color(NamedTextColor.DARK_RED).decorate(TextDecoration.BOLD)
+
+    /** WP-2.1c: the [ItemDefinition.itemLevel] line. */
+    fun itemLevel(ctx: LoreContext): List<Component> = listOf(
+        Component.text("")
+            .append(ctx.localize(Component.translatable("ramrpg.item.level", Component.text(ctx.definition.itemLevel))))
+            .color(NamedTextColor.GRAY)
+    )
+
+    /** WP-2.1c: current/max durability, plus the shared inert banner once durability hits zero. */
+    fun durability(ctx: LoreContext): List<Component> {
+        val cur = ctx.instance.durability
+        val max = ctx.instance.maxDurability
+        val depleted = cur <= 0
+        val line = Component.text("")
+            .append(ctx.localize(Component.translatable("ramrpg.item.durability", Component.text(cur), Component.text(max))))
+            .color(if (depleted) NamedTextColor.RED else NamedTextColor.GRAY)
+        return if (depleted) listOf(line, inertBanner(ctx)) else listOf(line)
+    }
+
     fun rarity(ctx: LoreContext): List<Component> {
         return listOf(
-            Component.text(ctx.definition.rarity.name)
-                .color(colorOf(ctx.definition.rarity))
-                .decorate(TextDecoration.BOLD)
+            Component.text("")
+                .append(
+                    Component.text(ctx.definition.rarity.name)
+                        .color(colorOf(ctx.definition.rarity))
+                        .decorate(TextDecoration.BOLD)
+                )
+                .append(Component.text(" "))
+                .append(ctx.localize(qualityBandComponent(ctx.instance.quality)).color(NamedTextColor.GRAY))
         )
+    }
+
+    /** WP-2.1c: renders the WP-2.1b quality placeholder bands (`docs/design/2.1b-quality-durability.md`). */
+    private fun qualityBandComponent(quality: Double): Component = when {
+        quality < 0.20 -> Component.translatable("ramrpg.item.quality.crude")
+        quality < 0.40 -> Component.translatable("ramrpg.item.quality.rough")
+        quality < 0.60 -> Component.translatable("ramrpg.item.quality.standard")
+        quality < 0.80 -> Component.translatable("ramrpg.item.quality.fine")
+        quality < 0.95 -> Component.translatable("ramrpg.item.quality.superior")
+        else -> Component.translatable("ramrpg.item.quality.masterwork")
     }
 }
 
@@ -304,6 +409,9 @@ class LoreTemplate(private val sections: List<LoreSection>) {
             LoreSection.SocketsLine,
             LoreSection.Description,
             LoreSection.Enchantments,
+            LoreSection.Requirements,
+            LoreSection.ItemLevel,
+            LoreSection.Durability,
             LoreSection.RarityLine,
         ))
     }
@@ -339,6 +447,30 @@ data class ItemDefinition(
      */
     val equipSlots: Set<EquipmentSlot> = EquipSlotDefaults.forCategories(categories),
 )
+
+/**
+ * WP-2.1c: the SINGLE inert-item check. Every item-based [dev.willram.ramrpg.api.stats.StatProvider]
+ * (equipment base stats, enchantments, reforge, sockets -- and sets, once WP-5.3's `SetStatProvider`
+ * lands) MUST route through this (or [isInert]) before contributing ANY stat modifier for [instance]. A
+ * provider that skips this check is an exploit: it lets an under-leveled, unmet-requirement, or
+ * (eventually) broken item quietly out-contribute every correctly-gated provider. See
+ * `docs/design/2.1c-inert-items.md`.
+ *
+ * Checked in order:
+ * 1. [ItemInstanceData.durability] `<= 0` -> [InertReason.ZERO_DURABILITY].
+ * 2. Any [requirements] entry [isMet] `false` against [state] -> [InertReason.UNMET_REQUIREMENT].
+ *
+ * `null` means fully active (contributes normally).
+ */
+fun ItemDefinition.inertReason(instance: ItemInstanceData, state: ItemRequirementState): InertReason? {
+    if (instance.durability <= 0) return InertReason.ZERO_DURABILITY
+    if (requirements.any { !it.isMet(state) }) return InertReason.UNMET_REQUIREMENT
+    return null
+}
+
+/** Convenience over [inertReason]: `true` iff the item is inert for any reason. */
+fun ItemDefinition.isInert(instance: ItemInstanceData, state: ItemRequirementState): Boolean =
+    inertReason(instance, state) != null
 
 interface ItemDefinitionRegistry {
     fun get(key: ItemKey): ItemDefinition?
