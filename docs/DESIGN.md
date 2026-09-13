@@ -22,6 +22,7 @@ damage pipeline, and the dataVersion ledger.
 - [1.5a — Content schema: file layout and type map](design/1.5a-content-schema.md)
 - [1.5b — Effect schema, builtin action/condition/matcher ids](design/1.5b-effect-schema.md)
 - [1.5c — Reload semantics and what is not hot-swappable](design/1.5c-reload-semantics.md)
+- [1.5d — Builtin items as content (parity + first-run extraction)](design/1.5d-builtin-content.md)
 - [1.6a — HUD composition order and slot budget](design/1.6a-hud-composition.md)
 
 ## Phase 2

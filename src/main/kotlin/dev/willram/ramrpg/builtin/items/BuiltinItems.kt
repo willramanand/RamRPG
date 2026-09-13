@@ -1,259 +1,46 @@
-/** Vanilla wrapper ItemDefinitions (tools, weapons, armor, misc). */
+/**
+ * WP-1.5d: loader-backed shim over the packaged `content/items/builtin.conf` resource (authored
+ * alongside this file at `src/main/resources/content/items/builtin.conf`; see
+ * docs/design/1.5d-builtin-content.md for the full parity guarantee and first-run extraction story).
+ *
+ * [registerAll] stays the programmatic entry point (rule 7 -- no api break, `RamRPG.registerBuiltins()`
+ * keeps calling it unchanged): it loads the packaged HOCON via [RpgContentLoader.loadPackaged] and turns
+ * each [dev.willram.ramrpg.core.config.specs.ItemSpec] into an [ItemDefinition] through the EXACT SAME
+ * [ContentRegistrarRpg.buildItem] mapping the live `content/` pipeline uses, so this path and the
+ * operator-editable HOCON path are structurally guaranteed to agree -- see `BuiltinItemsParityTest`,
+ * which asserts this against a frozen snapshot of the old hand-written Kotlin registry.
+ *
+ * The load is a small, bounded classpath read + single-file HOCON parse (65 entries) done via a
+ * throwaway temp directory (RamCore's [dev.willram.ramcore.content.ContentLoader] only reads real
+ * filesystem directories). It runs synchronously from `RamRPG.registerBuiltins()`, the exact same
+ * enable()-time bootstrap point the old in-memory Kotlin construction ran from -- see the WP's Folia
+ * rule 4 carve-out ("at load()/enable() bootstrap where the existing content load already runs"). This
+ * does NOT touch or require an operator's data folder; copying the packaged resource into `content/` so
+ * an operator can edit it is [RpgContentLoader.extractPackagedContent]'s job, wired into the real
+ * `content/` pipeline ([dev.willram.ramrpg.core.modules.ContentModule], outside this WP's file scope).
+ */
 package dev.willram.ramrpg.builtin.items
 
-import dev.willram.ramrpg.api.identity.ItemKey
-import dev.willram.ramrpg.api.identity.StatKey
-import dev.willram.ramrpg.api.items.ItemCategory
-import dev.willram.ramrpg.api.items.ItemDefinition
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
-import dev.willram.ramrpg.api.items.ItemRequirement
-import dev.willram.ramrpg.api.items.Rarity
-import dev.willram.ramrpg.api.items.StatRoll
-import dev.willram.ramrpg.api.stats.ModifierOperation
-import dev.willram.ramrpg.api.stats.ModifierSource
-import dev.willram.ramrpg.api.stats.SourceType
-import dev.willram.ramrpg.api.stats.StatModifier
-import dev.willram.ramrpg.builtin.identity.RamSkills
-import dev.willram.ramrpg.builtin.identity.RamStats
-import net.kyori.adventure.text.Component
+import dev.willram.ramrpg.core.config.ContentRegistrarRpg
+import dev.willram.ramrpg.core.config.RpgContentLoader
 import org.bukkit.Material
 
-private fun ik(v: String) = ItemKey.of("ramrpg", v)
-
-private fun stat(stat: StatKey, amount: Double, refId: String): StatModifier =
-    StatModifier(stat, amount, ModifierOperation.ADD, ModifierSource(SourceType.ITEM, dev.willram.ramcore.content.ContentId.of("ramrpg", refId)))
-
-private data class IDef(
-    val id: String,
-    val name: String,
-    val mat: Material,
-    val cats: Set<ItemCategory>,
-    val rarity: Rarity,
-    val stats: List<Pair<StatKey, Double>>,
-    val rolls: List<StatRoll> = emptyList(),
-)
-
-private fun weaponRolls() = listOf(
-    StatRoll(RamStats.STRENGTH, 1.0, 6.0),
-    StatRoll(RamStats.CRIT_CHANCE, 0.0, 5.0),
-)
-private fun armorRolls() = listOf(
-    StatRoll(RamStats.HEALTH, 2.0, 10.0),
-    StatRoll(RamStats.DEFENSE, 1.0, 6.0),
-)
-
-private val DEFS = listOf(
-    // Swords
-    IDef("wooden_sword", "Wooden Sword", Material.WOODEN_SWORD, setOf(ItemCategory.SWORD), Rarity.COMMON, listOf(RamStats.DAMAGE to 2.75)),
-    IDef("stone_sword", "Stone Sword", Material.STONE_SWORD, setOf(ItemCategory.SWORD), Rarity.COMMON, listOf(RamStats.DAMAGE to 3.0)),
-    IDef("iron_sword", "Iron Sword", Material.IRON_SWORD, setOf(ItemCategory.SWORD), Rarity.COMMON, listOf(RamStats.DAMAGE to 4.5)),
-    IDef("golden_sword", "Golden Sword", Material.GOLDEN_SWORD, setOf(ItemCategory.SWORD), Rarity.COMMON, listOf(RamStats.DAMAGE to 2.5)),
-    IDef("diamond_sword", "Diamond Sword", Material.DIAMOND_SWORD, setOf(ItemCategory.SWORD), Rarity.UNCOMMON, listOf(RamStats.DAMAGE to 6.5)),
-    IDef("netherite_sword", "Netherite Sword", Material.NETHERITE_SWORD, setOf(ItemCategory.SWORD), Rarity.RARE, listOf(RamStats.DAMAGE to 8.0)),
-    // Axes
-    IDef("wooden_axe", "Wooden Axe", Material.WOODEN_AXE, setOf(ItemCategory.AXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 2.5)),
-    IDef("stone_axe", "Stone Axe", Material.STONE_AXE, setOf(ItemCategory.AXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 2.75)),
-    IDef("iron_axe", "Iron Axe", Material.IRON_AXE, setOf(ItemCategory.AXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 3.5)),
-    IDef("golden_axe", "Golden Axe", Material.GOLDEN_AXE, setOf(ItemCategory.AXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 2.0)),
-    IDef("diamond_axe", "Diamond Axe", Material.DIAMOND_AXE, setOf(ItemCategory.AXE), Rarity.UNCOMMON, listOf(RamStats.DAMAGE to 6.0)),
-    IDef("netherite_axe", "Netherite Axe", Material.NETHERITE_AXE, setOf(ItemCategory.AXE), Rarity.RARE, listOf(RamStats.DAMAGE to 7.5)),
-    // Pickaxes
-    IDef("wooden_pickaxe", "Wooden Pickaxe", Material.WOODEN_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 1.0)),
-    IDef("stone_pickaxe", "Stone Pickaxe", Material.STONE_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 1.5)),
-    IDef("iron_pickaxe", "Iron Pickaxe", Material.IRON_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 1.75)),
-    IDef("golden_pickaxe", "Golden Pickaxe", Material.GOLDEN_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.COMMON, listOf(RamStats.DAMAGE to 1.5)),
-    IDef("diamond_pickaxe", "Diamond Pickaxe", Material.DIAMOND_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.UNCOMMON, listOf(RamStats.DAMAGE to 1.5)),
-    IDef("netherite_pickaxe", "Netherite Pickaxe", Material.NETHERITE_PICKAXE, setOf(ItemCategory.PICKAXE), Rarity.RARE, listOf(RamStats.DAMAGE to 2.5)),
-    // Shovels (no damage)
-    IDef("wooden_shovel", "Wooden Shovel", Material.WOODEN_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.COMMON, emptyList()),
-    IDef("stone_shovel", "Stone Shovel", Material.STONE_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.COMMON, emptyList()),
-    IDef("iron_shovel", "Iron Shovel", Material.IRON_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.COMMON, emptyList()),
-    IDef("golden_shovel", "Golden Shovel", Material.GOLDEN_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.COMMON, emptyList()),
-    IDef("diamond_shovel", "Diamond Shovel", Material.DIAMOND_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.UNCOMMON, emptyList()),
-    IDef("netherite_shovel", "Netherite Shovel", Material.NETHERITE_SHOVEL, setOf(ItemCategory.SHOVEL), Rarity.RARE, emptyList()),
-    // Hoes
-    IDef("wooden_hoe", "Wooden Hoe", Material.WOODEN_HOE, setOf(ItemCategory.HOE), Rarity.COMMON, emptyList()),
-    IDef("stone_hoe", "Stone Hoe", Material.STONE_HOE, setOf(ItemCategory.HOE), Rarity.COMMON, emptyList()),
-    IDef("iron_hoe", "Iron Hoe", Material.IRON_HOE, setOf(ItemCategory.HOE), Rarity.COMMON, emptyList()),
-    IDef("golden_hoe", "Golden Hoe", Material.GOLDEN_HOE, setOf(ItemCategory.HOE), Rarity.COMMON, emptyList()),
-    IDef("diamond_hoe", "Diamond Hoe", Material.DIAMOND_HOE, setOf(ItemCategory.HOE), Rarity.UNCOMMON, emptyList()),
-    IDef("netherite_hoe", "Netherite Hoe", Material.NETHERITE_HOE, setOf(ItemCategory.HOE), Rarity.RARE, emptyList()),
-    // Bows / crossbows / trident / mace / rod
-    IDef("bow", "Bow", Material.BOW, setOf(ItemCategory.BOW), Rarity.COMMON, listOf(RamStats.DAMAGE to 7.0)),
-    IDef("crossbow", "Crossbow", Material.CROSSBOW, setOf(ItemCategory.CROSSBOW), Rarity.COMMON, listOf(RamStats.DAMAGE to 9.0)),
-    IDef("trident", "Trident", Material.TRIDENT, setOf(ItemCategory.TRIDENT), Rarity.RARE, listOf(RamStats.DAMAGE to 10.0)),
-    IDef("mace", "Mace", Material.MACE, setOf(ItemCategory.MACE), Rarity.RARE, listOf(RamStats.DAMAGE to 15.0)),
-    IDef("fishing_rod", "Fishing Rod", Material.FISHING_ROD, setOf(ItemCategory.FISHING_ROD), Rarity.COMMON, emptyList()),
-    IDef("elytra", "Elytra", Material.ELYTRA, setOf(ItemCategory.ELYTRA), Rarity.RARE, emptyList()),
-    // Helmets
-    IDef("leather_helmet", "Leather Helmet", Material.LEATHER_HELMET, setOf(ItemCategory.HELMET), Rarity.COMMON, listOf(RamStats.DEFENSE to 2.5)),
-    IDef("chainmail_helmet", "Chainmail Helmet", Material.CHAINMAIL_HELMET, setOf(ItemCategory.HELMET), Rarity.COMMON, listOf(RamStats.DEFENSE to 2.5)),
-    IDef("iron_helmet", "Iron Helmet", Material.IRON_HELMET, setOf(ItemCategory.HELMET), Rarity.COMMON, listOf(RamStats.DEFENSE to 15.0)),
-    IDef("golden_helmet", "Golden Helmet", Material.GOLDEN_HELMET, setOf(ItemCategory.HELMET), Rarity.COMMON, listOf(RamStats.DEFENSE to 12.5)),
-    IDef("diamond_helmet", "Diamond Helmet", Material.DIAMOND_HELMET, setOf(ItemCategory.HELMET), Rarity.UNCOMMON, listOf(RamStats.DEFENSE to 25.0)),
-    IDef("netherite_helmet", "Netherite Helmet", Material.NETHERITE_HELMET, setOf(ItemCategory.HELMET), Rarity.RARE, listOf(RamStats.DEFENSE to 35.0, RamStats.TRUE_DEFENSE to 5.0)),
-    // Chestplates
-    IDef("leather_chestplate", "Leather Chestplate", Material.LEATHER_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.COMMON, listOf(RamStats.DEFENSE to 5.0)),
-    IDef("chainmail_chestplate", "Chainmail Chestplate", Material.CHAINMAIL_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.COMMON, listOf(RamStats.DEFENSE to 5.0)),
-    IDef("iron_chestplate", "Iron Chestplate", Material.IRON_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.COMMON, listOf(RamStats.DEFENSE to 25.0)),
-    IDef("golden_chestplate", "Golden Chestplate", Material.GOLDEN_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.COMMON, listOf(RamStats.DEFENSE to 15.0)),
-    IDef("diamond_chestplate", "Diamond Chestplate", Material.DIAMOND_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.UNCOMMON, listOf(RamStats.DEFENSE to 35.0)),
-    IDef("netherite_chestplate", "Netherite Chestplate", Material.NETHERITE_CHESTPLATE, setOf(ItemCategory.CHESTPLATE), Rarity.RARE, listOf(RamStats.DEFENSE to 50.0, RamStats.TRUE_DEFENSE to 5.0)),
-    // Leggings
-    IDef("leather_leggings", "Leather Leggings", Material.LEATHER_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.COMMON, listOf(RamStats.DEFENSE to 3.5)),
-    IDef("chainmail_leggings", "Chainmail Leggings", Material.CHAINMAIL_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.COMMON, listOf(RamStats.DEFENSE to 3.5)),
-    IDef("iron_leggings", "Iron Leggings", Material.IRON_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.COMMON, listOf(RamStats.DEFENSE to 20.0)),
-    IDef("golden_leggings", "Golden Leggings", Material.GOLDEN_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.COMMON, listOf(RamStats.DEFENSE to 12.5)),
-    IDef("diamond_leggings", "Diamond Leggings", Material.DIAMOND_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.UNCOMMON, listOf(RamStats.DEFENSE to 25.0)),
-    IDef("netherite_leggings", "Netherite Leggings", Material.NETHERITE_LEGGINGS, setOf(ItemCategory.LEGGINGS), Rarity.RARE, listOf(RamStats.DEFENSE to 35.0, RamStats.TRUE_DEFENSE to 5.0)),
-    // Boots
-    IDef("leather_boots", "Leather Boots", Material.LEATHER_BOOTS, setOf(ItemCategory.BOOTS), Rarity.COMMON, listOf(RamStats.DEFENSE to 2.5)),
-    IDef("chainmail_boots", "Chainmail Boots", Material.CHAINMAIL_BOOTS, setOf(ItemCategory.BOOTS), Rarity.COMMON, listOf(RamStats.DEFENSE to 2.5)),
-    IDef("iron_boots", "Iron Boots", Material.IRON_BOOTS, setOf(ItemCategory.BOOTS), Rarity.COMMON, listOf(RamStats.DEFENSE to 15.0)),
-    IDef("golden_boots", "Golden Boots", Material.GOLDEN_BOOTS, setOf(ItemCategory.BOOTS), Rarity.COMMON, listOf(RamStats.DEFENSE to 10.0)),
-    IDef("diamond_boots", "Diamond Boots", Material.DIAMOND_BOOTS, setOf(ItemCategory.BOOTS), Rarity.UNCOMMON, listOf(RamStats.DEFENSE to 15.0)),
-    IDef("netherite_boots", "Netherite Boots", Material.NETHERITE_BOOTS, setOf(ItemCategory.BOOTS), Rarity.RARE, listOf(RamStats.DEFENSE to 25.0, RamStats.TRUE_DEFENSE to 5.0)),
-    IDef("enchanted_book", "Enchanted Book", Material.ENCHANTED_BOOK, setOf(ItemCategory.ENCHANTED_BOOK), Rarity.UNCOMMON, emptyList()),
-)
-
-private val WEAPON_CATS = setOf(ItemCategory.SWORD, ItemCategory.AXE, ItemCategory.MACE, ItemCategory.TRIDENT, ItemCategory.BOW, ItemCategory.CROSSBOW)
-private val ARMOR_CATS = setOf(ItemCategory.HELMET, ItemCategory.CHESTPLATE, ItemCategory.LEGGINGS, ItemCategory.BOOTS)
-
-/**
- * WP-2.1a: `itemLevel` anchor per [Rarity], lined up with the 0.1 power-curve bands (band starts:
- * 1 / 11 / 26 / 46 / 71) -- see `docs/design/2.1a-item-level-requirements.md`.
- */
-private fun itemLevelFor(rarity: Rarity): Int = when (rarity) {
-    Rarity.COMMON -> 1
-    Rarity.UNCOMMON -> 11
-    Rarity.RARE -> 26
-    Rarity.EPIC -> 46
-    Rarity.LEGENDARY -> 60
-    Rarity.MYTHIC -> 85
-}
-
-/** WP-2.1a: the Combat skill level a vanilla-wrapper weapon/armor piece gates on; COMMON gates nothing. */
-private fun combatLevelFor(rarity: Rarity): Int = when (rarity) {
-    Rarity.COMMON -> 0
-    Rarity.UNCOMMON -> 10
-    Rarity.RARE -> 20
-    Rarity.EPIC -> 35
-    Rarity.LEGENDARY -> 45
-    Rarity.MYTHIC -> 60
-}
-
-/**
- * WP-2.1a: sensible default requirements for a vanilla-wrapper [IDef] -- weapons gate on Combat level,
- * armor gates on half that (armor is worn passively, weapons are the offense-facing gate); COMMON items
- * (starter tier) are ungated. Tools (pickaxe/shovel/hoe) and misc/utility items stay ungated.
- */
-private fun requirementsFor(d: IDef): List<ItemRequirement> {
-    val level = combatLevelFor(d.rarity)
-    if (level <= 0) return emptyList()
-    return when {
-        d.cats.any { it in WEAPON_CATS } -> listOf(ItemRequirement.SkillLevel(RamSkills.COMBAT, level))
-        d.cats.any { it in ARMOR_CATS } -> listOf(ItemRequirement.SkillLevel(RamSkills.COMBAT, level / 2))
-        else -> emptyList()
-    }
-}
-
-/** Non-vanilla custom items (boss / loot exclusives). */
-private val CUSTOM: List<ItemDefinition> = listOf(
-    ItemDefinition(
-        key = ik("rogue_blade"),
-        displayName = net.kyori.adventure.text.Component.text("Rogue Blade"),
-        material = Material.IRON_SWORD,
-        rarity = Rarity.RARE,
-        categories = setOf(ItemCategory.SWORD),
-        baseStats = listOf(stat(RamStats.DAMAGE, 12.0, "rogue_blade")),
-        statRolls = listOf(
-            StatRoll(RamStats.STRENGTH, 5.0, 15.0),
-            StatRoll(RamStats.CRIT_CHANCE, 5.0, 12.0),
-            StatRoll(RamStats.CRIT_DAMAGE, 10.0, 30.0),
-        ),
-        itemLevel = itemLevelFor(Rarity.RARE),
-        requirements = listOf(
-            ItemRequirement.SkillLevel(RamSkills.COMBAT, 25),
-            ItemRequirement.StatThreshold(RamStats.STRENGTH, 20.0),
-        ),
-    ),
-    ItemDefinition(
-        key = ik("warden_husk_chest"),
-        displayName = net.kyori.adventure.text.Component.text("Warden Husk Chestplate"),
-        material = Material.NETHERITE_CHESTPLATE,
-        rarity = Rarity.LEGENDARY,
-        categories = setOf(ItemCategory.CHESTPLATE),
-        baseStats = listOf(
-            stat(RamStats.DEFENSE, 60.0, "warden_husk_chest"),
-            stat(RamStats.TRUE_DEFENSE, 15.0, "warden_husk_chest"),
-        ),
-        statRolls = listOf(
-            StatRoll(RamStats.HEALTH, 30.0, 80.0),
-            StatRoll(RamStats.WISDOM, 20.0, 60.0),
-        ),
-        itemLevel = itemLevelFor(Rarity.LEGENDARY),
-        requirements = listOf(
-            ItemRequirement.SkillLevel(RamSkills.COMBAT, 45),
-            ItemRequirement.StatThreshold(RamStats.HEALTH, 150.0),
-        ),
-    ),
-    ItemDefinition(
-        key = ik("dragon_fang"),
-        displayName = net.kyori.adventure.text.Component.text("Dragon Fang"),
-        material = Material.NETHERITE_SWORD,
-        rarity = Rarity.MYTHIC,
-        categories = setOf(ItemCategory.SWORD),
-        baseStats = listOf(stat(RamStats.DAMAGE, 40.0, "dragon_fang")),
-        statRolls = listOf(
-            StatRoll(RamStats.STRENGTH, 30.0, 80.0),
-            StatRoll(RamStats.CRIT_DAMAGE, 40.0, 100.0),
-            StatRoll(RamStats.FEROCITY, 20.0, 60.0),
-        ),
-        itemLevel = itemLevelFor(Rarity.MYTHIC),
-        // Intentionally gated behind the not-yet-built perk system (see ItemRequirement.PerkOwned's
-        // stub KDoc): until WP-5.1a ships PerkService this requirement never evaluates as met, so this
-        // mythic drop is a definition-time proof the form parses/round-trips, not a live gate WP-2.1c
-        // enforces today.
-        requirements = listOf(
-            ItemRequirement.SkillLevel(RamSkills.COMBAT, 70),
-            ItemRequirement.PerkOwned(dev.willram.ramcore.content.ContentId.of("ramrpg", "dragon_slayer")),
-        ),
-    ),
-    ItemDefinition(
-        key = ik("ember_charm"),
-        displayName = net.kyori.adventure.text.Component.text("Ember Charm"),
-        material = Material.BLAZE_POWDER,
-        rarity = Rarity.UNCOMMON,
-        categories = setOf(ItemCategory.MISC),
-        baseStats = listOf(stat(RamStats.STRENGTH, 5.0, "ember_charm")),
-        itemLevel = itemLevelFor(Rarity.UNCOMMON),
-    ),
-)
-
 object BuiltinItems {
+    private const val OWNER = "ramrpg-builtin"
+
     fun registerAll(reg: ItemDefinitionRegistry) {
-        val owner = "ramrpg-builtin"
-        for (d in DEFS) {
-            val mods = d.stats.map { (k, v) -> stat(k, v, d.id) }
-            val rolls = when {
-                d.rolls.isNotEmpty() -> d.rolls
-                d.cats.any { it in WEAPON_CATS } -> weaponRolls()
-                d.cats.any { it in ARMOR_CATS } -> armorRolls()
-                else -> emptyList()
-            }
-            reg.register(owner, ItemDefinition(
-                key = ik(d.id),
-                displayName = Component.text(d.name),
-                material = d.mat,
-                rarity = d.rarity,
-                categories = d.cats,
-                baseStats = mods,
-                allowVanillaWrapper = true,
-                statRolls = rolls,
-                itemLevel = itemLevelFor(d.rarity),
-                requirements = requirementsFor(d),
-            ))
+        val result = RpgContentLoader.loadPackaged()
+        check(result.successful()) {
+            "BuiltinItems: packaged content/items/builtin.conf failed to load: " +
+                result.errors().joinToString("; ") { it.describe() }
         }
-        for (custom in CUSTOM) reg.register(owner, custom)
+        for (spec in result.items) {
+            // Curated, packaged content: an unresolvable material here is a packaging bug, not an
+            // authoring mistake to aggregate and report (contrast ContentRegistrarRpg.registerAll,
+            // which DOES aggregate -- that path takes arbitrary operator-authored content).
+            val material = Material.valueOf(spec.material)
+            reg.register(OWNER, ContentRegistrarRpg.buildItem(spec, material))
+        }
     }
 }

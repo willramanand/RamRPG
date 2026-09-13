@@ -40,6 +40,10 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.spongepowered.configurate.ConfigurationNode
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.nio.file.Files
 import java.nio.file.Path
 
 /** Marker for every RPG content spec produced by [RpgContentLoader]; carries its parsed id. */
@@ -165,6 +169,82 @@ object RpgContentLoader {
             errorList = errors,
             sources = sources,
         )
+    }
+
+    /**
+     * WP-1.5d: resource paths, relative to the packaged `content/` classpath root bundled inside the
+     * plugin jar (`src/main/resources/content/...`), that mirror the on-disk `content/<type>/<file>`
+     * layout [load] reads from an operator's data folder. Each WP that packages a new default content
+     * file appends its path here; WP-1.5d packages only the builtin items (rule 9 -- this WP does not
+     * touch other content types) -- see docs/design/1.5d-builtin-content.md.
+     *
+     * Each packaged file is ONE HOCON OBJECT whose top-level keys are per-entry slugs (arbitrary --
+     * only each child's own `id` field matters to the loader), not the top-level ARRAY the equivalent
+     * `.yml` content file could use: Configurate's [HoconConfigurationLoader] parses a `.conf` file's
+     * `Config` root as an object and rejects a bare array ("has type LIST rather than object at file
+     * root") even though a YAML content file's root CAN be a list -- see `builtin.conf`'s own header
+     * comment. [extractPackagedContent] splits each keyed child back into its own real,
+     * independently-valid `<type>/<slug>.conf` file before RamCore's ContentLoader ever sees it.
+     */
+    private val PACKAGED_CONTENT: List<String> = listOf("items/builtin.conf")
+
+    /**
+     * WP-1.5d: first-run resource extraction. For every path in [PACKAGED_CONTENT], parses the packaged
+     * HOCON object (via Configurate's own load/save node API -- no hand-rolled parsing) and writes each
+     * top-level child as its own `<dataContentDir>/<type>/<slug>.conf` file, UNLESS that destination
+     * already exists -- so an operator's edited (or deliberately deleted) copy is never clobbered on a
+     * later startup, and only missing/new entries are (re-)written on an upgrade. Returns the paths
+     * actually written, for logging.
+     *
+     * Blocking classpath + file I/O, exactly like [load] -- callers run this off the main thread (see
+     * this file's header doc and [dev.willram.ramrpg.core.modules.ContentModule]).
+     */
+    fun extractPackagedContent(
+        dataContentDir: Path,
+        classLoader: ClassLoader = RpgContentLoader::class.java.classLoader,
+    ): List<Path> {
+        val extracted = ArrayList<Path>()
+        for (relative in PACKAGED_CONTENT) {
+            val type = relative.substringBefore('/')
+            val root = classLoader.getResourceAsStream("content/$relative")?.let { input ->
+                HoconConfigurationLoader.builder()
+                    .source { BufferedReader(InputStreamReader(input, Charsets.UTF_8)) }
+                    .build()
+                    .load()
+            } ?: continue
+            for ((slug, child) in root.childrenMap()) {
+                val dest = dataContentDir.resolve(type).resolve("$slug.conf")
+                if (Files.exists(dest)) continue
+                Files.createDirectories(dest.parent)
+                HoconConfigurationLoader.builder().path(dest).build().save(child)
+                extracted.add(dest)
+            }
+        }
+        return extracted
+    }
+
+    /**
+     * WP-1.5d: the "parity path" -- loads packaged content DIRECTLY from the plugin jar's classpath,
+     * without requiring (or touching) an operator's data folder. RamCore's [ContentLoader] only reads a
+     * real filesystem directory (`Files.isDirectory`, see its source), so this extracts
+     * [PACKAGED_CONTENT] into a throwaway temp directory via [extractPackagedContent] and then
+     * delegates to [load] -- no parsing/deserialization logic is duplicated, so this stays byte-for-byte
+     * consistent with the real `content/` pipeline. The temp directory is always cleaned up.
+     *
+     * Used by [dev.willram.ramrpg.builtin.items.BuiltinItems] (the programmatic entry point, rule 7)
+     * and by parity tests that run off-server.
+     */
+    fun loadPackaged(
+        effects: EffectSpec.Registries? = null,
+        classLoader: ClassLoader = RpgContentLoader::class.java.classLoader,
+    ): RpgContentLoadResult {
+        val tempRoot = Files.createTempDirectory("ramrpg-packaged-content")
+        try {
+            extractPackagedContent(tempRoot, classLoader)
+            return load(tempRoot, effects)
+        } finally {
+            tempRoot.toFile().deleteRecursively()
+        }
     }
 }
 
