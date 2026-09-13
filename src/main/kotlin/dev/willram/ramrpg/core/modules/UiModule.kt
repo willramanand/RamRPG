@@ -16,6 +16,9 @@ import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramcore.terminable.module.TerminableModule
 import dev.willram.ramrpg.core.listeners.ActionBarUi
 import dev.willram.ramrpg.core.listeners.BossBarUi
+import dev.willram.ramrpg.core.listeners.ItemRequirementServices
+import dev.willram.ramrpg.core.listeners.requirementStateFor
+import dev.willram.ramrpg.core.rendering.PacketItemRendererImpl
 import dev.willram.ramrpg.core.services.RpgServiceKeys
 import dev.willram.ramrpg.core.services.SkillServiceImpl
 
@@ -34,6 +37,18 @@ class UiModule(private val ctx: ServiceContext) : TerminableModule {
         val bossBar = consumer.bind(BossBarUi(skillService, skillRegistry, playerStore))
         bossBar.register(consumer)
         (skillService as? SkillServiceImpl)?.addXpGainListener(bossBar::onXpGain)
+
+        // WP-lore: surface per-viewer requirement lore (met green / unmet red) in the packet renderer.
+        // The renderer is constructed in RamRPG.load() before these services exist (B5: RamRPG.kt is
+        // frozen), so it is wired HERE via a settable hook -- the module-injected-hook pattern
+        // EntityProfileRegistryImpl.levelBandService established. requirementStateFor is the SAME
+        // no-self-satisfaction path WP-2.1c's StatProviders use, so a lore line agrees with whether the
+        // item is actually inert for the viewer.
+        (ctx.service(RpgServiceKeys.RENDERER) as? PacketItemRendererImpl)?.let { renderer ->
+            val requirementServices = ItemRequirementServices(skillRegistry, skillService, stats)
+            renderer.requirementStateHook = { viewer -> requirementStateFor(viewer, requirementServices) }
+            renderer.skillNameLookup = { key -> skillRegistry.get(key)?.displayName }
+        }
     }
 
     companion object {

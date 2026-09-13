@@ -20,6 +20,23 @@ class RenderCacheTest {
         assertNotEquals(base, base.copy(instanceHash = 1))
         assertNotEquals(base, base.copy(viewerLocale = "fr_fr"))
         assertNotEquals(base, base.copy(definitionRev = 1))
+        assertNotEquals(base, base.copy(viewerStateHash = 99), "WP-lore: viewer state is part of the key")
+    }
+
+    @Test
+    fun `a different viewer state on an otherwise identical key misses the cache`() {
+        // WP-lore (caching approach B): requirement met/unmet and active set count are per-viewer-state,
+        // folded into the key via viewerStateHash. When a player levels a skill or swaps a set piece, the
+        // hash changes, the key misses, and the lore re-renders -- no unrelated cache invalidation needed.
+        val cache = RenderCache()
+        val before = RenderCacheKey("ramrpg:iron_sword", 1, 0, "en_us", 0, viewerStateHash = 10)
+        val after = before.copy(viewerStateHash = 20)
+        var calls = 0
+
+        cache.get(before) { calls++; FakeItemStack() }
+        cache.get(after) { calls++; FakeItemStack() }
+
+        assertEquals(2, calls, "changed viewer state renders separately instead of serving stale lore")
     }
 
     @Test
