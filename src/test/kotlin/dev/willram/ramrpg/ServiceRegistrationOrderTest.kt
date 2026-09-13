@@ -7,6 +7,9 @@ import dev.willram.ramcore.testkit.TestServiceContext
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.combat.DamagePipeline
+import dev.willram.ramrpg.api.crafting.CraftingService
+import dev.willram.ramrpg.api.crafting.RecipeRegistry
+import dev.willram.ramrpg.api.crafting.StationRegistry
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
@@ -27,7 +30,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * WP-1.7b: proves the order [dev.willram.ramrpg.RamRPG.load] constructs and registers the 18 RPG
+ * WP-1.7b: proves the order [dev.willram.ramrpg.RamRPG.load] constructs and registers the 21 RPG
  * services in (recorded as [RpgServiceGraph.constructionOrder]) is a valid topological order of the
  * service dependency DAG ([RpgServiceGraph.dependencies]) -- every service is built after each of the
  * services its constructor needs. Entirely off-server: `RamRPG` (a Bukkit `JavaPlugin`) is never
@@ -36,7 +39,7 @@ import org.junit.jupiter.api.Test
 class ServiceRegistrationOrderTest {
 
     @Test
-    fun `the graph covers exactly the 18 declared services`() {
+    fun `the graph covers exactly the 21 declared services`() {
         assertEquals(RpgServiceKeys.all(), RpgServiceGraph.dependencies.keys.toSet())
         assertEquals(RpgServiceKeys.all(), RpgServiceGraph.constructionOrder.toSet())
         assertEquals(
@@ -70,11 +73,12 @@ class ServiceRegistrationOrderTest {
 
     @Test
     fun `RamCore's registry accepts the declared order with dependsOn edges`() {
-        // Register the stub-able services (16 of 18: EconomyService and QuestService are concrete
+        // Register the stub-able services (19 of 21: EconomyService and QuestService are concrete
         // classes ProxyFakes cannot stub -- see ServiceWiringTest) in construction order, wiring each
         // one's dependsOn edges. loadAll() runs RamCore's own topological resolver: a bad order or a
-        // cycle in the declared graph would make it throw. None of these 16 depend on the two excluded
-        // services, so the sub-graph is self-contained.
+        // cycle in the declared graph would make it throw. Edges to the two excluded services are
+        // skipped by the `if (dep in stubbable)` guard below (only CRAFTING_SERVICE has one, to ECONOMY),
+        // so the registered sub-graph stays self-contained.
         val registry: ServiceRegistry = TestServiceContext.withRegistry().services()
         val stubbable = RpgServiceKeys.all() - setOf(RpgServiceKeys.ECONOMY, RpgServiceKeys.QUESTS)
 
@@ -107,6 +111,9 @@ class ServiceRegistrationOrderTest {
         RpgServiceKeys.REFORGES -> ProxyFakes.stub(ReforgeRegistry::class.java)
         RpgServiceKeys.GEMS -> ProxyFakes.stub(GemRegistry::class.java)
         RpgServiceKeys.QUEST_REGISTRY -> ProxyFakes.stub(QuestRegistry::class.java)
+        RpgServiceKeys.RECIPE_REGISTRY -> ProxyFakes.stub(RecipeRegistry::class.java)
+        RpgServiceKeys.STATION_REGISTRY -> ProxyFakes.stub(StationRegistry::class.java)
+        RpgServiceKeys.CRAFTING_SERVICE -> ProxyFakes.stub(CraftingService::class.java)
         else -> error("no stub for $key")
     }
 }

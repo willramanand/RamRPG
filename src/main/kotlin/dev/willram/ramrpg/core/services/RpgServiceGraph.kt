@@ -44,6 +44,14 @@ object RpgServiceGraph {
             RpgServiceKeys.QUEST_REGISTRY, RpgServiceKeys.SKILL_SERVICE,
             RpgServiceKeys.ECONOMY, RpgServiceKeys.PLAYER_STORE,
         ),
+        // WP-3.1b crafting trio (orchestrator merge-time load()-promotion).
+        RpgServiceKeys.RECIPE_REGISTRY to emptySet(),
+        RpgServiceKeys.STATION_REGISTRY to emptySet(),
+        RpgServiceKeys.CRAFTING_SERVICE to setOf(
+            RpgServiceKeys.ITEM_DEFINITIONS, RpgServiceKeys.ITEM_INSTANCES, RpgServiceKeys.RECIPE_REGISTRY,
+            RpgServiceKeys.ECONOMY, RpgServiceKeys.SKILL_SERVICE, RpgServiceKeys.RENDERER,
+            RpgServiceKeys.SKILL_REGISTRY, RpgServiceKeys.STATS,
+        ),
     )
 
     /**
@@ -69,5 +77,8 @@ object RpgServiceGraph {
         RpgServiceKeys.ECONOMY,
         RpgServiceKeys.QUEST_REGISTRY,
         RpgServiceKeys.QUESTS,
+        RpgServiceKeys.RECIPE_REGISTRY,
+        RpgServiceKeys.STATION_REGISTRY,
+        RpgServiceKeys.CRAFTING_SERVICE,
     )
 }

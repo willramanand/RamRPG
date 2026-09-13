@@ -156,10 +156,30 @@ class RamRPG : RamPlugin() {
             questRegistry, skillService, economy, playerStore, questDir.toPath(),
         )
 
+        // WP-3.1b crafting trio -- constructed and registered at load()-time (not in CraftingModule at
+        // enable()) because RamCore's ServiceRegistry rejects register() once loadAll() has run, and the
+        // content pipeline + WP-3.1c/3.3a/3.3c/3.3d resolve these via ctx.service(...). This is the
+        // orchestrator's documented merge-time B5 promotion of the keys WP-3.1b declared but could not
+        // register from its own (enable-time) module.
+        val recipeRegistry = dev.willram.ramrpg.core.services.RecipeRegistryImpl()
+        val stationRegistry = dev.willram.ramrpg.core.services.StationRegistryImpl()
+        val craftingService = dev.willram.ramrpg.core.services.CraftingServiceImpl(
+            itemDefs = itemDefs,
+            itemInstances = itemInstances,
+            recipes = recipeRegistry,
+            economy = economy,
+            skillService = skillService,
+            renderer = renderer,
+            requirementServices = dev.willram.ramrpg.core.listeners.ItemRequirementServices(
+                skillRegistry, skillService, stats,
+            ),
+        )
+
         registerServices(
             platform, playerStore, stats, skillRegistry, skillService, itemDefs, itemInstances,
             enchantments, entityProfiles, abilities, abilityService, damagePipeline, renderer,
             reforges, gems, economy, questRegistry, quests,
+            recipeRegistry, stationRegistry, craftingService,
         )
     }
 
@@ -186,6 +206,9 @@ class RamRPG : RamPlugin() {
         economy: dev.willram.ramrpg.core.listeners.EconomyService,
         questRegistry: dev.willram.ramrpg.api.quests.QuestRegistry,
         quests: dev.willram.ramrpg.core.services.QuestService,
+        recipeRegistry: dev.willram.ramrpg.api.crafting.RecipeRegistry,
+        stationRegistry: dev.willram.ramrpg.api.crafting.StationRegistry,
+        craftingService: dev.willram.ramrpg.api.crafting.CraftingService,
     ) {
         val registry = services()
         registry.register(RpgServiceKeys.PLATFORM, platform)
@@ -206,6 +229,9 @@ class RamRPG : RamPlugin() {
         registry.register(RpgServiceKeys.ECONOMY, economy)
         registry.register(RpgServiceKeys.QUEST_REGISTRY, questRegistry)
         registry.register(RpgServiceKeys.QUESTS, quests)
+        registry.register(RpgServiceKeys.RECIPE_REGISTRY, recipeRegistry)
+        registry.register(RpgServiceKeys.STATION_REGISTRY, stationRegistry)
+        registry.register(RpgServiceKeys.CRAFTING_SERVICE, craftingService)
     }
 
     override fun enable() {

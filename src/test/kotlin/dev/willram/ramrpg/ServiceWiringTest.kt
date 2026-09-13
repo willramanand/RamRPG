@@ -6,6 +6,9 @@ import dev.willram.ramcore.testkit.TestServiceContext
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.combat.DamagePipeline
+import dev.willram.ramrpg.api.crafting.CraftingService
+import dev.willram.ramrpg.api.crafting.RecipeRegistry
+import dev.willram.ramrpg.api.crafting.StationRegistry
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
@@ -35,7 +38,7 @@ import org.junit.jupiter.api.Test
  * (`dev.willram.ramcore.testkit`, from the `ramcore-test` artifact already on the test classpath), the
  * same fixture RamCore's own `ServiceRegistryTest` uses.
  *
- * 16 of the 18 keyed RPG types are plain interfaces, stood in here by `ProxyFakes.stub(...)`.
+ * 19 of the 21 keyed RPG types are plain interfaces, stood in here by `ProxyFakes.stub(...)`.
  * `RpgServiceKeys.ECONOMY` (`EconomyService`) and `RpgServiceKeys.QUESTS` (`QuestService`, which takes
  * an `EconomyService`) are deliberately NOT registered with live instances in the "resolves" test
  * below: `EconomyService`'s class file references `net.milkbowl.vault.economy.Economy`, which is only
@@ -57,8 +60,9 @@ class ServiceWiringTest {
             "rpg-item-definitions", "rpg-item-instances", "rpg-enchantments", "rpg-entity-profiles",
             "rpg-abilities", "rpg-ability-service", "rpg-damage-pipeline", "rpg-renderer", "rpg-reforges",
             "rpg-gems", "rpg-economy", "rpg-quest-registry", "rpg-quests",
+            "rpg-recipe-registry", "rpg-station-registry", "rpg-crafting-service",
         )
-        assertEquals(18, keys.size, "expected one key per RPG subsystem service")
+        assertEquals(21, keys.size, "expected one key per RPG subsystem service")
         assertEquals(expectedIds, keys.map { it.id() }.toSet())
         assertEquals(keys.size, keys.map { it.type() }.toSet().size, "no two keys may share a service type")
     }
@@ -84,6 +88,9 @@ class ServiceWiringTest {
             RpgServiceKeys.REFORGES to ProxyFakes.stub(ReforgeRegistry::class.java),
             RpgServiceKeys.GEMS to ProxyFakes.stub(GemRegistry::class.java),
             RpgServiceKeys.QUEST_REGISTRY to ProxyFakes.stub(QuestRegistry::class.java),
+            RpgServiceKeys.RECIPE_REGISTRY to ProxyFakes.stub(RecipeRegistry::class.java),
+            RpgServiceKeys.STATION_REGISTRY to ProxyFakes.stub(StationRegistry::class.java),
+            RpgServiceKeys.CRAFTING_SERVICE to ProxyFakes.stub(CraftingService::class.java),
         )
 
         assertEquals(STUB_ONLY_KEYS, instances.keys, "test fixture must cover every stub-able key")
