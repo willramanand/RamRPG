@@ -115,3 +115,8 @@ run/
 # Claude Code
 .claude/settings.local.json
 .claude/worktrees/
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
