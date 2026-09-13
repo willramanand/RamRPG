@@ -1,4 +1,5 @@
 {
+  "ramrpg.ability.cooldown_lore": "Cooldown: {0}",
   "ramrpg.ability.disabled": "Ability disabled",
   "ramrpg.ability.not_enough_mana": "Not enough mana",
   "ramrpg.ability.on_cooldown": "On cooldown ({0})",
