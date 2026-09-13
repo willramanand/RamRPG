@@ -41,6 +41,8 @@ import dev.willram.ramcore.reload.ContentSnapshot
 import dev.willram.ramcore.service.ServiceContext
 import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramcore.terminable.module.TerminableModule
+import dev.willram.ramrpg.api.crafting.RecipeRegistry
+import dev.willram.ramrpg.api.crafting.StationRegistry
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
@@ -79,6 +81,8 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
     private lateinit var entities: EntityProfileRegistry
     private lateinit var reforges: ReforgeRegistry
     private lateinit var gems: GemRegistry
+    private lateinit var recipeRegistry: RecipeRegistry
+    private lateinit var stationRegistry: StationRegistry
     private lateinit var stats: StatService
     private lateinit var renderer: PacketItemRenderer
     private lateinit var contentDir: File
@@ -123,6 +127,11 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
         entities = ctx.service(RpgServiceKeys.ENTITY_PROFILES)
         reforges = ctx.service(RpgServiceKeys.REFORGES)
         gems = ctx.service(RpgServiceKeys.GEMS)
+        // WP-3.1d: the crafting registries are registered at load()-time (RamRPG.kt's B5 trio promotion),
+        // so they resolve here like every other service; the registrar registers recipes/stations into them
+        // owner-scoped, and the reload path below unregisters them by owner alongside the other six types.
+        recipeRegistry = ctx.service(RpgServiceKeys.RECIPE_REGISTRY)
+        stationRegistry = ctx.service(RpgServiceKeys.STATION_REGISTRY)
         stats = ctx.service(RpgServiceKeys.STATS)
         renderer = ctx.service(RpgServiceKeys.RENDERER)
 
@@ -134,6 +143,8 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
             entities = entities,
             reforges = reforges,
             gems = gems,
+            recipes = recipeRegistry,
+            stations = stationRegistry,
         )
 
         // The ServiceContext at runtime IS the RamRPG plugin (RpgModules.all(this) passes it, and
@@ -153,6 +164,17 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
         // Load off the main thread (blocking file I/O), then apply registrations on the global thread
         // where the RPG registries expect their mutations.
         platform.runAsync {
+            // WP-3.1d: seed the packaged crafting pack (material items + recipes + the smithing station)
+            // into the operator's content/ on first run, so the shipped crafting content BOTH loads here
+            // and becomes operator-editable. Extraction skips any file that already exists, so this never
+            // clobbers an operator's edits and only fills missing entries -- safe on every startup. The
+            // builtin item/set packs are deliberately NOT extracted here: they are registered
+            // programmatically (BuiltinItems / SetModule), and re-loading them through this owner would
+            // double-register their ids (RamCore's ContentRegistry throws on a duplicate id).
+            RpgContentLoader.extractPackagedContent(
+                contentDir.toPath(),
+                paths = RpgContentLoader.packagedCraftingContent(),
+            )
             val result: RpgContentLoadResult = RpgContentLoader.load(contentDir.toPath(), effectRegistries)
             // WP-1.5c: also load through RamCore's raw loader so the FIRST `/rpg reload` has a real
             // baseline to diff against (what startup actually loaded), not an empty snapshot. Off-thread,
@@ -244,7 +266,10 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
                 val registrationErrors: List<ValidationError> = if (dryRun) {
                     emptyList()
                 } else {
-                    val errs = applyToRegistries(registrar, rpgResult, items, skills, enchants, entities, reforges, gems)
+                    val errs = applyToRegistries(
+                        registrar, rpgResult, items, skills, enchants, entities, reforges, gems,
+                        recipeRegistry, stationRegistry,
+                    )
                     renderer.invalidate()
                     for (player in Bukkit.getOnlinePlayers()) stats.markDirty(player, StatDirtyReason.WORLD_CHANGED)
                     snapshot = next
@@ -270,9 +295,10 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
 
         /**
          * Unregisters [owner] from EVERY OWNED registry the HOCON content pack touches -- items, skills,
-         * enchants, entities, reforges, gems; all SIX, not a subset (the WP-1.5a review flagged that the
-         * pre-existing `ramrpg-override` reload path in RamRPG.kt only unregisters a subset) -- then
-         * re-registers everything in [result] under [owner] via [registrar]. Stat DEFINITIONS are
+         * enchants, entities, reforges, gems, and (WP-3.1d) recipes + stations; all EIGHT, not a subset
+         * (the WP-1.5a review flagged that the pre-existing `ramrpg-override` reload path in RamRPG.kt only
+         * unregisters a subset) -- then re-registers everything in [result] under [owner] via [registrar].
+         * Stat DEFINITIONS are
          * deliberately not in this parameter list: [dev.willram.ramrpg.api.stats.StatService] has no
          * `unregisterOwner`, so they cannot be scoped/removed here. [ContentRegistrarRpg.registerAll]
          * (which every content type shares -- rule 1 forbids forking a parallel stat registry just for
@@ -294,6 +320,8 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
             entities: EntityProfileRegistry,
             reforges: ReforgeRegistry,
             gems: GemRegistry,
+            recipes: RecipeRegistry,
+            stations: StationRegistry,
             owner: String = OWNER,
         ): List<ValidationError> {
             items.unregisterOwner(owner)
@@ -302,6 +330,8 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
             entities.unregisterOwner(owner)
             reforges.unregisterOwner(owner)
             gems.unregisterOwner(owner)
+            recipes.unregisterOwner(owner)
+            stations.unregisterOwner(owner)
             return registrar.registerAll(result, owner)
         }
 

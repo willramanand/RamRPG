@@ -119,6 +119,10 @@ class ContentLoaderItemSpecTest {
         entities = NoopEntityProfileRegistry,
         reforges = NoopReforgeRegistry,
         gems = NoopGemRegistry,
+        // WP-3.1d: real in-memory impls (pure, no Bukkit) -- this test loads no recipes/stations, so they
+        // stay empty and never affect item registration.
+        recipes = dev.willram.ramrpg.core.services.RecipeRegistryImpl(),
+        stations = dev.willram.ramrpg.core.services.StationRegistryImpl(),
     )
 
     private fun writeConf(root: Path, type: String, name: String, body: String) {
