@@ -99,6 +99,21 @@ data class ItemSpec(
      * `1.0` within [DAMAGE_SPLIT_EPSILON] before this spec is ever constructed.
      */
     val damageSplit: Map<DamageTypeKey, Double> = emptyMap(),
+    /**
+     * WP-3.2a: parsed `tags = ["..."]` free-form labels (e.g. `["tier-2", "ingot", "metal"]`). Empty when
+     * absent, so every pre-existing item still parses unchanged.
+     *
+     * PARSED-BUT-NOT-YET-MATCHED. This is a forward-looking SEAM only: nothing consumes it yet. No
+     * [dev.willram.ramrpg.api.crafting.Ingredient] variant matches on it -- in particular
+     * [dev.willram.ramrpg.api.crafting.Ingredient.MaterialTag] matches a RAW `org.bukkit.Material`, NOT
+     * these RPG string tags -- and the live [dev.willram.ramrpg.api.items.ItemDefinition] carries no
+     * `tags` field, so these labels are not surfaced onto any runtime object. A later WP (out of WP-3.2a's
+     * scope) is what makes tags matchable: it adds `ItemDefinition.tags` plus a new `Ingredient.Tag` kind
+     * so recipes can say "any item tagged tier-2". Until then the WP-3.2a refine ladder gates each
+     * tier-to-tier step on the specific lower-tier item id (an [dev.willram.ramrpg.api.crafting.Ingredient.Item]),
+     * never on tags -- see docs/design/3.2a-material-tiers.md.
+     */
+    val tags: Set<String> = emptySet(),
 ) : RpgContentSpec {
     override val id: ContentId get() = key.id
 
@@ -122,6 +137,7 @@ data class ItemSpec(
                 requirements = requirements(node),
                 equipSlots = equipSlots(node),
                 damageSplit = damageSplit(node, id),
+                tags = tags(node),
             )
         }
 
@@ -191,5 +207,9 @@ data class ItemSpec(
             }
             return out
         }
+
+        /** Parses `tags = ["tag1", "tag2", ...]` -> a [Set<String>]. Absent -> empty set. */
+        private fun tags(node: ConfigurationNode): Set<String> =
+            SpecNodes.stringList(node, "tags").toSet()
     }
 }
