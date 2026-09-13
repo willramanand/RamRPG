@@ -19,6 +19,7 @@ package dev.willram.ramrpg.core.config
 import dev.willram.ramcore.exception.ValidationError
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
+import dev.willram.ramrpg.api.items.EquipSlotDefaults
 import dev.willram.ramrpg.api.items.ItemDefinition
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
 import dev.willram.ramrpg.api.reforges.ReforgeRegistry
@@ -76,24 +77,43 @@ class ContentRegistrarRpg(
         return errors
     }
 
-    /** Turns a pure [ItemSpec] into an [ItemDefinition] once its [Material] has resolved. */
-    private fun buildItem(spec: ItemSpec, material: Material): ItemDefinition {
-        val baseStats = spec.baseStats.map { (statKey, amount) ->
-            StatModifier(statKey, amount, ModifierOperation.ADD, ModifierSource(SourceType.ITEM, spec.id))
+    companion object {
+        /**
+         * WP-1.5d: turns a pure [ItemSpec] into an [ItemDefinition] once its [Material] has resolved.
+         * Public (not the instance-scoped `registerAll`'s private helper it used to be) so
+         * [dev.willram.ramrpg.builtin.items.BuiltinItems] -- which loads the SAME packaged
+         * `content/items/builtin.conf` resource through [RpgContentLoader], but has no need for the
+         * other six registries a full [ContentRegistrarRpg] instance requires -- can build its
+         * [ItemDefinition]s through this exact mapping instead of forking a second one. This is the
+         * seam WP-1.5b/2.1a left open (see their design notes): [spec]'s `effects`, `itemLevel`,
+         * `requirements` and `equipSlots` are now copied onto the built definition, closing the gap
+         * that made HOCON/Kotlin parity impossible before this WP.
+         */
+        fun buildItem(spec: ItemSpec, material: Material): ItemDefinition {
+            val baseStats = spec.baseStats.map { (statKey, amount) ->
+                StatModifier(statKey, amount, ModifierOperation.ADD, ModifierSource(SourceType.ITEM, spec.id))
+            }
+            return ItemDefinition(
+                key = spec.key,
+                displayName = spec.displayName,
+                material = material,
+                rarity = spec.rarity,
+                categories = spec.categories,
+                baseStats = baseStats,
+                effects = spec.effects,
+                // loreTemplate = DEFAULT is the constructor default -- content has no way to override it (yet).
+                maxStack = spec.maxStack,
+                customModelData = spec.customModelData,
+                allowVanillaWrapper = spec.allowVanillaWrapper,
+                description = spec.description,
+                statRolls = spec.statRolls,
+                itemLevel = spec.itemLevel,
+                requirements = spec.requirements,
+                // null (no `equip-slots` override) -> fall back to the SAME category default
+                // ItemDefinition's own constructor default would compute, so an omitted override and an
+                // explicit one that happens to match the default are indistinguishable on the built definition.
+                equipSlots = spec.equipSlots ?: EquipSlotDefaults.forCategories(spec.categories),
+            )
         }
-        return ItemDefinition(
-            key = spec.key,
-            displayName = spec.displayName,
-            material = material,
-            rarity = spec.rarity,
-            categories = spec.categories,
-            baseStats = baseStats,
-            // effects = emptyList() (WP-1.5b seam) and loreTemplate = DEFAULT are the constructor defaults.
-            maxStack = spec.maxStack,
-            customModelData = spec.customModelData,
-            allowVanillaWrapper = spec.allowVanillaWrapper,
-            description = spec.description,
-            statRolls = spec.statRolls,
-        )
     }
 }
