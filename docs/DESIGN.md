@@ -31,6 +31,7 @@ damage pipeline, and the dataVersion ledger.
 - [2.1b — Quality tiers and durability model](design/2.1b-quality-durability.md)
 - [2.1c — Inert item rules](design/2.1c-inert-items.md)
 - [2.2 — Durability drain rates and repair costs](design/2.2-durability.md)
+- [Lore rendering — surfacing requirement/quality/durability/set lore per-viewer](design/lore-rendering.md)
 - [2.3a — Damage types, split rules and resistance formula](design/2.3a-damage-types.md)
 
 ## Phase 5

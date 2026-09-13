@@ -12,12 +12,16 @@ import dev.willram.ramrpg.api.abilities.formatCooldown
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.identity.AbilityKey
 import dev.willram.ramrpg.api.identity.ItemKey
+import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.items.ItemDefinition
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
 import dev.willram.ramrpg.api.items.ItemInstanceData
 import dev.willram.ramrpg.api.items.ItemInstanceService
+import dev.willram.ramrpg.api.items.ItemRequirementState
 import dev.willram.ramrpg.api.items.LoreContext
+import dev.willram.ramrpg.api.items.SetLoreInfo
 import dev.willram.ramrpg.api.items.colorOf
+import dev.willram.ramrpg.api.items.isMet
 import dev.willram.ramcore.pdc.PDCs
 import dev.willram.ramcore.pdc.PdcKey
 import net.kyori.adventure.text.format.TextDecoration
@@ -43,6 +47,14 @@ data class RenderCacheKey(
     val instanceHash: Int,
     val viewerLocale: String,
     val definitionRev: Int,
+    /**
+     * WP-lore: a hash of the viewer-state that requirement / set-bonus lore depends on -- whether each
+     * requirement is met for THIS viewer, plus the viewer's active set-member count (see
+     * [PacketItemRendererImpl.viewerStateHash]). Keyed here so a player whose skills or equipped set
+     * pieces changed misses the cache and re-renders, with no unrelated cache invalidation. Defaults to
+     * `0` for callers (and pure tests) that render no viewer-state-dependent lore.
+     */
+    val viewerStateHash: Int = 0,
 )
 
 class RenderCache(private val cap: Int = 4096) {
@@ -107,6 +119,32 @@ class PacketItemRendererImpl(
     private val cache: RenderCache = RenderCache(),
 ) : PacketItemRenderer {
 
+    /**
+     * WP-lore: builds the viewer's [ItemRequirementState] so [dev.willram.ramrpg.api.items.LoreSection.Requirements]
+     * renders each requirement met (green) / unmet (red) FOR THIS VIEWER. Set by
+     * [dev.willram.ramrpg.core.modules.UiModule] at setup() (never RamRPG.kt, B5) via the same
+     * module-injected-hook pattern [dev.willram.ramrpg.core.services.EntityProfileRegistryImpl.levelBandService]
+     * establishes -- the renderer is constructed in RamRPG.load() before the skill/stat services this needs
+     * exist, so it cannot be constructor-injected. Null until wired; requirement lore then renders
+     * fail-closed (every requirement unmet), matching WP-2.1c's fail-closed default.
+     */
+    var requirementStateHook: ((Player) -> ItemRequirementState?)? = null
+
+    /**
+     * WP-lore: display name for a requirement's [SkillKey] (from the skill registry) so a skill-level
+     * requirement reads "Combat 10", not "combat 10". Set alongside [requirementStateHook] by UiModule.
+     */
+    var skillNameLookup: (SkillKey) -> Component? = { null }
+
+    /**
+     * WP-lore: builds the viewer's [SetLoreInfo] for a rendered item's set -- its active member count for
+     * THIS viewer -- or null when the item belongs to no set. Set by
+     * [dev.willram.ramrpg.core.modules.SetModule] at setup(); the SetRegistry it reuses is created in
+     * SetModule.setup(), after the renderer is constructed, so it too is injected rather than constructed.
+     * Null renders no set block (a non-member item legitimately shows nothing).
+     */
+    var setLoreHook: ((Player, ItemKey) -> SetLoreInfo?)? = null
+
     override fun invalidate() = cache.invalidateAll()
 
     override fun render(viewer: Player, item: ItemStack): ItemStack {
@@ -117,14 +155,20 @@ class PacketItemRendererImpl(
         // shulker box has no ItemInstanceData) - still walk it for nested RPG payloads.
         val data = instances.identify(item) ?: return renderNested(viewer, item)
         val def = registry.get(data.identity.key) ?: return renderNested(viewer, item)
+        // WP-lore: per-viewer lore state. Built BEFORE the cache lookup so it both (a) feeds the render
+        // and (b) folds into the cache key via viewerStateHash. Cheap -- a few skill-level reads plus one
+        // equipped-slot scan -- far cheaper than the ItemStack clone + component build it gates.
+        val reqState = requirementStateHook?.invoke(viewer)
+        val setInfo = setLoreHook?.invoke(viewer, def.key)
         val key = RenderCacheKey(
             itemKeyId = data.identity.key.id.toString(),
             schemaVersion = data.identity.schemaVersion,
             instanceHash = instanceHash(data),
             viewerLocale = viewer.locale().toString(),
             definitionRev = registry.revision(),
+            viewerStateHash = viewerStateHash(def, reqState, setInfo),
         )
-        val rendered = cache.get(key) { renderUncached(def, data, viewer, item) }
+        val rendered = cache.get(key) { renderUncached(def, data, viewer, item, reqState, setInfo) }
         // Cooldown remaining changes every tick; composing it here (post-cache) instead of baking
         // it into the cached snapshot keeps RenderCache keyed by (itemHash, locale) only - a live
         // countdown would otherwise go stale until some other item property invalidated the cache.
@@ -142,7 +186,14 @@ class PacketItemRendererImpl(
         return out
     }
 
-    private fun renderUncached(def: ItemDefinition, data: ItemInstanceData, viewer: Player, source: ItemStack): ItemStack {
+    private fun renderUncached(
+        def: ItemDefinition,
+        data: ItemInstanceData,
+        viewer: Player,
+        source: ItemStack,
+        requirementState: ItemRequirementState?,
+        setBonus: SetLoreInfo?,
+    ): ItemStack {
         val out = source.clone()
         val meta = out.itemMeta ?: return out
         val rarityColor = colorOf(def.rarity)
@@ -164,6 +215,9 @@ class PacketItemRendererImpl(
             statFormatLookup = { sk -> stats?.definition(sk)?.format ?: StatFormat.WHOLE },
             reforgeNameLookup = { rk -> reforges?.get(rk)?.displayName },
             gemNameLookup = { id -> gems?.get(GemKey(id))?.displayName },
+            skillNameLookup = skillNameLookup,
+            requirementState = requirementState,
+            setBonus = setBonus,
         )
         val lore = def.loreTemplate.render(ctx)
             .map { it.decoration(TextDecoration.ITALIC, false) }
@@ -221,6 +275,25 @@ class PacketItemRendererImpl(
         meta.lore((meta.lore() ?: emptyList()) + line)
         item.itemMeta = meta
         return item
+    }
+
+    /**
+     * WP-lore: the per-viewer-state component of [RenderCacheKey]. Requirement met/unmet and the active
+     * set-member count depend on the VIEWER (their skills, their equipped gear), not on (itemHash, locale)
+     * -- so unless the cache keys on them, a player who levelled a skill or swapped armor would keep seeing
+     * stale lore until some unrelated property invalidated the cache. This WP takes approach (B): extend the
+     * cache key. It is chosen over composing these sections post-cache (A) because -- unlike cooldown, which
+     * ticks continuously and so stays a post-cache compose (see [applyCooldownLore]) -- requirement/set state
+     * changes only on discrete skill/equipment events, so per-viewer-state caching keeps the full template
+     * (correct section ORDER included) intact and simply refreshes on those events, with no fragile
+     * splice-at-position logic. Hashes ONLY what changes the rendered output: whether each requirement is
+     * met, and the active set count.
+     */
+    private fun viewerStateHash(def: ItemDefinition, reqState: ItemRequirementState?, setInfo: SetLoreInfo?): Int {
+        var h = 1
+        for (req in def.requirements) h = 31 * h + (if (reqState != null && req.isMet(reqState)) 1 else 0)
+        h = 31 * h + (setInfo?.activeCount ?: -1)
+        return h
     }
 
     private fun instanceHash(d: ItemInstanceData): Int {

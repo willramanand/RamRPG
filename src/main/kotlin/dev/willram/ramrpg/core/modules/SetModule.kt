@@ -34,9 +34,11 @@ import dev.willram.ramrpg.core.effects.EffectActionRegistry
 import dev.willram.ramrpg.core.effects.EffectConditionRegistry
 import dev.willram.ramrpg.core.listeners.ItemRequirementServices
 import dev.willram.ramrpg.core.platform.PlatformScheduler
+import dev.willram.ramrpg.core.rendering.PacketItemRendererImpl
 import dev.willram.ramrpg.core.services.RpgServiceKeys
 import dev.willram.ramrpg.core.services.SetRegistryImpl
 import dev.willram.ramrpg.core.services.SetStatProvider
+import dev.willram.ramrpg.core.services.setLoreInfoFor
 import java.util.logging.Logger
 
 class SetModule(private val ctx: ServiceContext) : TerminableModule {
@@ -76,6 +78,17 @@ class SetModule(private val ctx: ServiceContext) : TerminableModule {
         // always available -- no fail-closed wiring gap for set-member requirement/inert checks.
         val requirementServices = ItemRequirementServices(skillRegistry, skillService, stats)
         stats.registerProvider(SetStatProvider(itemInstances, itemDefs, registry, requirementServices), OWNER)
+
+        // WP-lore: surface per-viewer set-bonus lore ("Name (2/4)", active/inactive) in the packet
+        // renderer. Wired HERE (not RamRPG.kt, B5): the SetRegistry only exists after this setup() runs,
+        // whereas the renderer was constructed back in RamRPG.load(). setLoreInfoFor reuses the SAME
+        // equippedSetCount + requirementStateFor path SetStatProvider does, so the lore's active count
+        // can never disagree with the count that actually granted the bonus.
+        (ctx.service(RpgServiceKeys.RENDERER) as? PacketItemRendererImpl)?.let { renderer ->
+            renderer.setLoreHook = { viewer, itemKey ->
+                setLoreInfoFor(viewer, itemKey, itemInstances, itemDefs, registry, requirementServices)
+            }
+        }
     }
 
     companion object {

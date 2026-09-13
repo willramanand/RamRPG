@@ -13,12 +13,14 @@ package dev.willram.ramrpg.core.services
 
 import dev.willram.ramrpg.api.effects.ScalingContext
 import dev.willram.ramrpg.api.effects.StatEffect
+import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.items.ItemDefinition
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
 import dev.willram.ramrpg.api.items.ItemInstanceData
 import dev.willram.ramrpg.api.items.ItemInstanceService
 import dev.willram.ramrpg.api.items.ItemRequirementState
+import dev.willram.ramrpg.api.items.SetLoreInfo
 import dev.willram.ramrpg.api.items.isInert
 import dev.willram.ramrpg.api.sets.SetDefinition
 import dev.willram.ramrpg.api.sets.SetRegistry
@@ -68,6 +70,35 @@ internal fun setStatsFor(set: SetDefinition, activeCount: Int): List<StatModifie
         }
     }
     return out
+}
+
+/**
+ * WP-lore: the [SetLoreInfo] block `PacketItemRenderer` shows for [itemKey] to [player] -- the owning
+ * set's display name, total member count, the viewer's current ACTIVE (non-inert) member count, and the
+ * threshold -> effects map -- or `null` when the item belongs to no set. Deliberately reuses the SAME
+ * [equippedDefs] + [requirementStateFor] + [equippedSetCount] path [SetStatProvider.provideStats] uses,
+ * so the lore's active count can never disagree with the count that actually granted the stat bonus
+ * (an inert / requirement-failing piece is excluded from both identically -- the inert-exclusion rule
+ * lives ONLY in [equippedSetCount], never duplicated here). `activeCount` mirrors what
+ * [dev.willram.ramrpg.api.items.LoreRender.setBonus] then uses to light thresholds.
+ */
+internal fun setLoreInfoFor(
+    player: Player,
+    itemKey: ItemKey,
+    items: ItemInstanceService,
+    defs: ItemDefinitionRegistry,
+    sets: SetRegistry,
+    requirementServices: ItemRequirementServices?,
+): SetLoreInfo? {
+    val set = sets.all().firstOrNull { itemKey in it.members } ?: return null
+    val equipped = equippedDefs(player, items, defs)
+    val state = requirementStateFor(player, requirementServices)
+    return SetLoreInfo(
+        displayName = set.displayName,
+        totalMembers = set.members.size,
+        activeCount = equippedSetCount(equipped, state, set),
+        thresholds = set.thresholds,
+    )
 }
 
 private fun equippedDefs(
