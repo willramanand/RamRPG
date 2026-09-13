@@ -6,10 +6,12 @@
  * [dev.willram.ramrpg.core.modules.ContentModule], which is handed in as two callbacks -- the same
  * pattern `SkillsCommand` already uses for `reloadContent: () -> Unit`.
  *
- * Both literals carry an interim `hasPermission("ramrpg.admin")` guard (the one-line convention
- * `SkillsCommand` already uses) -- WP-1.5e replaces it with the real permission-node system. The guard
- * is NOT deferred: `/rpg validate <dir>` reads an operator-supplied path and `/rpg reload` rebuilds
- * every content registry, so neither may ship reachable by an unprivileged player even transiently.
+ * Both literals are guarded by their own declared permission node (WP-1.5e; see `permissions:` in
+ * paper-plugin.yml) rather than the ad-hoc `ramrpg.admin` string `SkillsCommand` uses: `validate` needs
+ * `ramrpg.command.validate` and `reload` needs `ramrpg.command.reload`, each a child of the
+ * `ramrpg.command.admin` umbrella node. The guard is NOT deferred: `/rpg validate <dir>` reads an
+ * operator-supplied path and `/rpg reload` rebuilds every content registry, so neither may ship
+ * reachable by an unprivileged player even transiently.
  */
 package dev.willram.ramrpg.core.commands
 
@@ -36,9 +38,8 @@ class RpgCommand(
             Commands.literal("rpg")
                 .then(
                     Commands.literal("validate")
-                        // Interim guard (WP-1.5e swaps in the real permission-node system). Gates the
-                        // whole subtree incl. the arbitrary-path `dir` arg below.
-                        .requires { it.sender.hasPermission("ramrpg.admin") }
+                        // Gates the whole subtree incl. the arbitrary-path `dir` arg below.
+                        .requires { it.sender.hasPermission("ramrpg.command.validate") }
                         .executes { ctx -> runValidate(ctx, defaultDir) }
                         .then(
                             Commands.argument("dir", StringArgumentType.greedyString())
@@ -49,8 +50,7 @@ class RpgCommand(
                 )
                 .then(
                     Commands.literal("reload")
-                        // Interim guard (WP-1.5e swaps in the real permission-node system).
-                        .requires { it.sender.hasPermission("ramrpg.admin") }
+                        .requires { it.sender.hasPermission("ramrpg.command.reload") }
                         .executes { ctx -> runReload(ctx, dryRun = false) }
                         .then(Commands.literal("--dry-run").executes { ctx -> runReload(ctx, dryRun = true) })
                 )
