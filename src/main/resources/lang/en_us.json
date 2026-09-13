@@ -4,6 +4,7 @@
   "ramrpg.ability.on_cooldown": "On cooldown ({0})",
   "ramrpg.ability.requirements_not_met": "Requirements not met",
   "ramrpg.ability.requires": "Requires {0} {1}",
+  "ramrpg.quest.complete": "Quest complete: {0}",
   "ramrpg.skill.level_up": "Level Up!",
   "ramrpg.skill.level_up_message": "{0} → Lv {1}",
   "ramrpg.skill.level_up_subtitle": "{0} Lv {1}",

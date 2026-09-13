@@ -91,7 +91,7 @@ class PlayerStoreTest {
         val data = store.require(id)
         data.skillLevels["combat"] = 5
         data.currentMana = 42.0
-        data.questCompleted.add("q1")
+        data.disabledAbilities.add("q1")
 
         service.quit(id)
         scheduler.runAll()
@@ -100,7 +100,7 @@ class PlayerStoreTest {
         val loaded = reload()
         assertEquals(5, loaded.skillLevels["combat"])
         assertEquals(42.0, loaded.currentMana)
-        assertTrue(loaded.questCompleted.contains("q1"))
+        assertTrue(loaded.disabledAbilities.contains("q1"))
     }
 
     @Test
@@ -140,18 +140,18 @@ class PlayerStoreTest {
     fun `snapshot is an independent deep copy`() {
         val original = PlayerRpgData().apply {
             skillLevels["combat"] = 3
-            questCompleted.add("q1")
+            disabledAbilities.add("q1")
             currentMana = 10.0
         }
 
         val snap = original.snapshot()
 
         original.skillLevels["combat"] = 99
-        original.questCompleted.add("q2")
+        original.disabledAbilities.add("q2")
         original.currentMana = 20.0
 
         assertEquals(3, snap.skillLevels["combat"])
-        assertEquals(setOf("q1"), snap.questCompleted)
+        assertEquals(setOf("q1"), snap.disabledAbilities)
         assertEquals(10.0, snap.currentMana)
     }
 }

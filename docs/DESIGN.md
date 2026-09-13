@@ -15,6 +15,7 @@ damage pipeline, and the dataVersion ledger.
 ## Phase 1
 
 - [1.1a — Loot tables and drop rates](design/1.1a-loot-tables.md)
+- [1.2a — Quest model and objective mapping](design/1.2a-quest-objectives.md)
 - [1.3 — Ability cooldown scopes and persistence](design/1.3-cooldown-scopes.md)
 
 ## Phase 0 baseline

@@ -262,8 +262,11 @@ class RamRPG : RamPlugin() {
         CombatListener(damagePipeline).register()
         economy = EconomyService()
         questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
-        quests = dev.willram.ramrpg.core.services.QuestService(questRegistry, skillService, economy, playerStore)
+        val questDir = File(dataFolder, "quests")
+        if (!questDir.exists()) questDir.mkdirs()
+        quests = dev.willram.ramrpg.core.services.QuestService(questRegistry, skillService, economy, playerStore, questDir.toPath())
         dev.willram.ramrpg.builtin.quests.BuiltinQuests.registerAll(questRegistry)
+        quests.registerObjectives()
         XpListener(entityProfiles, skillService, economy).register()
         dev.willram.ramrpg.core.listeners.QuestProgressListener(quests, entityProfiles).register()
         manaRegen = ManaRegen(stats, playerStore, platform).also { it.register() }

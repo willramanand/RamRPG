@@ -9,7 +9,7 @@ step that upgrades an old record on load. **One owner per bump — no exceptions
 | dataVersion | Fields | Owner WP | Migration rule |
 | --- | --- | --- | --- |
 | **v1** | `skillLevels`, `skillXp`, `currentMana`, `maxManaCache`, `lastActiveSkillId`, `questProgress`, `questCompleted`, `lastDailyReset`, `disabledAbilities` | WP-F5 (today) | baseline; no migration |
-| **v2** | quest progress migrated onto RamCore objectives | WP-1.2a | must never drop completed quests; idempotent |
+| ~~v2~~ | quest progress **relocated** to RamCore's ObjectiveProgressStore (removed from the profile) | WP-1.2a | no migration — in-house / fresh servers; fields simply removed |
 | **v3** | `activeBuffs` | WP-4.1b | absent buffs default to empty, never null |
 | **v4** | `perkRanks`, `perkPointsSpent` | WP-5.1a | absent ranks default to empty, never null |
 

@@ -17,10 +17,8 @@ class PlayerRpgData : DataItem() {
     @Volatile var maxManaCache: Double = 0.0
     /** Stored as ContentId string; null until first xp gain. */
     @Volatile var lastActiveSkillId: String? = null
-    /** Quest key → current progress count. */
-    val questProgress: MutableMap<String, Int> = ConcurrentHashMap()
-    /** Completed quest keys (for daily resets these get cleared). */
-    val questCompleted: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    // Quest progress moved to RamCore's ObjectiveProgressStore in WP-1.2a; only the daily-reset stamp
+    // stays on the profile.
     /** Epoch ms of last daily reset. */
     @Volatile var lastDailyReset: Long = 0L
     /** Ability keys (ContentId.toString) the player has toggled off. */
@@ -42,8 +40,6 @@ class PlayerRpgData : DataItem() {
         val copy = PlayerRpgData()
         copy.skillLevels.putAll(this.skillLevels)
         copy.skillXp.putAll(this.skillXp)
-        copy.questProgress.putAll(this.questProgress)
-        copy.questCompleted.addAll(this.questCompleted)
         copy.disabledAbilities.addAll(this.disabledAbilities)
         copy.currentMana = this.currentMana
         copy.maxManaCache = this.maxManaCache
