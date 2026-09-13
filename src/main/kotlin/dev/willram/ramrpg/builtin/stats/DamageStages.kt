@@ -116,12 +116,6 @@ class FerocityStage(private val stats: StatService) : DamageStage {
     }
 }
 
-class IndicatorStage : DamageStage {
-    override val key = id("indicator")
-    override val priority = DamagePriority.INDICATOR
-    override fun apply(ctx: DamageContext) { /* hooks register via DamagePipelineEffect */ }
-}
-
 class ApplyStage : DamageStage {
     override val key = id("apply")
     override val priority = DamagePriority.APPLY

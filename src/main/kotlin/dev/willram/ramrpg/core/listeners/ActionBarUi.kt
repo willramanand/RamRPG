@@ -40,15 +40,7 @@ class ActionBarUi(
             val hpFmt = stats.definition(RamStats.HEALTH)?.format ?: StatFormat.WHOLE
             val defFmt = stats.definition(RamStats.DEFENSE)?.format ?: StatFormat.WHOLE
             val manaFmt = stats.definition(RamStats.WISDOM)?.format ?: StatFormat.WHOLE
-            val msg = Component.text()
-                .append(Component.text("❤ ", NamedTextColor.RED))
-                .append(Component.text("${hpFmt.format(hp)}/${hpFmt.format(maxHp)}  ", NamedTextColor.RED))
-                .append(Component.text("❈ ", NamedTextColor.GREEN))
-                .append(Component.text("${defFmt.format(def)}  ", NamedTextColor.GREEN))
-                .append(Component.text("✎ ", NamedTextColor.AQUA))
-                .append(Component.text("${manaFmt.format(mana)}/${manaFmt.format(maxMana)}", NamedTextColor.AQUA))
-                .build()
-            player.sendActionBar(msg)
+            player.sendActionBar(composeActionBar(hp, maxHp, def, mana, maxMana, hpFmt, defFmt, manaFmt))
         }
         tasks[player.uniqueId] = handle
     }
@@ -60,3 +52,16 @@ class ActionBarUi(
         tasks.clear()
     }
 }
+
+/** HUD line: ❤ hp/max  ❈ def  ✎ mana/max. Pure so it is unit-testable. Slot budget: 3 segments. */
+fun composeActionBar(
+    hp: Double, maxHp: Double, def: Double, mana: Double, maxMana: Double,
+    hpFmt: StatFormat, defFmt: StatFormat, manaFmt: StatFormat,
+): Component = Component.text()
+    .append(Component.text("❤ ", NamedTextColor.RED))
+    .append(Component.text("${hpFmt.format(hp)}/${hpFmt.format(maxHp)}  ", NamedTextColor.RED))
+    .append(Component.text("❈ ", NamedTextColor.GREEN))
+    .append(Component.text("${defFmt.format(def)}  ", NamedTextColor.GREEN))
+    .append(Component.text("✎ ", NamedTextColor.AQUA))
+    .append(Component.text("${manaFmt.format(mana)}/${manaFmt.format(maxMana)}", NamedTextColor.AQUA))
+    .build()
