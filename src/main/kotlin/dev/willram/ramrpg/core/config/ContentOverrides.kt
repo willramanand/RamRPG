@@ -2,6 +2,13 @@
  * Runtime content override loader. Reads JSON files from
  * dataFolder/content/{stats,items,skills,entities,enchants}/&lt;id&gt;.json
  * and re-registers builtin definitions with override-applied copies.
+ *
+ * DEPRECATED (WP-1.5a): this JSON-patch path can only *tweak fields of existing* builtins. The HOCON
+ * [RpgContentLoader] + [ContentRegistrarRpg] pipeline supersedes it -- it *defines* full content
+ * (`.conf` files under `content/<type>/`) with `extends:` inheritance and source-tagged, aggregated validation. This
+ * shim is kept working for one release so existing `content/<type>/<id>.json` files keep applying; it
+ * shares the `content/` directory harmlessly because [RpgContentLoader] reads only `.conf`/`.yml`/`.yaml`
+ * while this reads only `.json`. Remove once no server ships JSON overrides.
  */
 package dev.willram.ramrpg.core.config
 
@@ -99,6 +106,12 @@ private class OverrideEnchantment(
     }
 }
 
+@Deprecated(
+    "The JSON-patch override path is superseded by the HOCON RpgContentLoader + ContentRegistrarRpg " +
+        "pipeline (WP-1.5a), which defines full content with extends: inheritance and aggregated, " +
+        "source-tagged validation. Kept working for one release for existing content/**/<id>.json files.",
+    ReplaceWith("RpgContentLoader.load(baseDir)", "dev.willram.ramrpg.core.config.RpgContentLoader"),
+)
 class ContentOverrideLoader(private val baseDir: Path) {
 
     fun apply(
