@@ -23,6 +23,8 @@ class PlayerRpgData : DataItem() {
     val questCompleted: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** Epoch ms of last daily reset. */
     @Volatile var lastDailyReset: Long = 0L
+    /** Ability keys (ContentId.toString) the player has toggled off. */
+    val disabledAbilities: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     fun getLevel(key: SkillKey): Int = skillLevels.getOrDefault(key.id.toString(), 1)
     fun getXp(key: SkillKey): Double = skillXp.getOrDefault(key.id.toString(), 0.0)

@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION")
 /**
  * Loads lang/&lt;locale&gt;.json files into Adventure GlobalTranslator with
  * language-only fallback registration so locale variants resolve.

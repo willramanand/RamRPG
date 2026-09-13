@@ -152,7 +152,7 @@ class RamRPG : RamPlugin() {
         entityProfiles = entityProfilesImpl
 
         abilities = AbilityRegistryImpl()
-        abilityService = AbilityServiceImpl(abilities, playerStore)
+        abilityService = AbilityServiceImpl(abilities, playerStore, skillService, dev.willram.ramrpg.builtin.identity.RamSkills.SORCERY)
         damagePipeline = DamagePipelineImpl()
         reforges = ReforgeRegistryImpl()
         gems = GemRegistryImpl()
@@ -164,7 +164,7 @@ class RamRPG : RamPlugin() {
         registerDamageStages()
         registerListeners(fileStore)
 
-        skillsCommand = SkillsCommand(skillRegistry, skillService, stats, enchantments, itemInstances, itemDefs, reforges, gems, playerStore)
+        skillsCommand = SkillsCommand(skillRegistry, skillService, stats, enchantments, itemInstances, itemDefs, reforges, gems, playerStore, abilities, abilityService)
 
         runCatching { dev.willram.ramrpg.core.config.RamRpgMetrics.register(this) }
         log("<yellow>RamRPG <green>enabled <gray>(rewrite scaffold)")
@@ -204,7 +204,7 @@ class RamRPG : RamPlugin() {
         BuiltinItems.registerAll(itemDefs)
         BuiltinEnchants.registerAll(enchantments)
         BuiltinEntities.registerAll(entityProfiles)
-        BuiltinAbilities.registerAll(abilities)
+        BuiltinAbilities.registerAll(abilities, skillService)
         BuiltinReforges.registerAll(reforges)
         BuiltinGems.registerAll(gems)
     }
@@ -251,7 +251,7 @@ class RamRPG : RamPlugin() {
         XpListener(entityProfiles, skillService, economy).register()
         dev.willram.ramrpg.core.listeners.QuestProgressListener(quests, entityProfiles).register()
         manaRegen = ManaRegen(stats, playerStore, platform).also { it.register() }
-        PacketRenderListener(renderer).register()
+        PacketRenderListener(renderer, itemInstances).register()
         AbilityListener(abilityService).register()
         actionBarUi = ActionBarUi(stats, playerStore, platform).also { it.register() }
         bossBarUi = BossBarUi(skillService, skillRegistry, playerStore).also { it.register() }
@@ -260,6 +260,8 @@ class RamRPG : RamPlugin() {
         NonCombatXpListener(skillService).register()
         LootListener(entityProfiles, itemInstances, itemDefs).register()
         EnchantingListener(enchantments, itemInstances, itemDefs).register()
+        dev.willram.ramrpg.core.listeners.DurabilityListener().register()
+        dev.willram.ramrpg.core.listeners.InventoryRefreshListener(platform).register()
     }
 
     private fun onSkillLevelUp(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {

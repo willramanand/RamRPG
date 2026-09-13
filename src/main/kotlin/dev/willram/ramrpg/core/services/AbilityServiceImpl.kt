@@ -15,8 +15,14 @@ import dev.willram.ramrpg.api.abilities.AbilityTrigger
 import dev.willram.ramrpg.api.abilities.CooldownScope
 import dev.willram.ramrpg.api.abilities.ResourceCost
 import dev.willram.ramrpg.api.identity.AbilityKey
+import dev.willram.ramrpg.api.identity.SkillKey
+import dev.willram.ramrpg.api.identity.XpSourceKey
+import dev.willram.ramrpg.api.skills.SkillService
+import dev.willram.ramrpg.api.skills.XpContext
+import dev.willram.ramrpg.api.skills.XpSource
 import dev.willram.ramrpg.core.storage.PlayerStore
 import net.kyori.adventure.text.Component
+import org.bukkit.entity.Player
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,15 +44,37 @@ class AbilityRegistryImpl(
 class AbilityServiceImpl(
     private val registry: AbilityRegistry,
     private val playerStore: PlayerStore,
+    private val skillService: SkillService,
+    /** Skill that gains XP equal to mana spent on successful ability fires. */
+    private val manaXpSkill: SkillKey,
 ) : AbilityService {
 
     private data class CdKey(val player: UUID, val ability: AbilityKey, val scope: CooldownScope, val item: UUID?)
     private val cooldowns = ConcurrentHashMap<CdKey, Long>()
 
+    override fun isDisabled(player: Player, ability: AbilityKey): Boolean =
+        playerStore.require(player.uniqueId).disabledAbilities.contains(ability.id.toString())
+
+    override fun setDisabled(player: Player, ability: AbilityKey, disabled: Boolean) {
+        val data = playerStore.require(player.uniqueId)
+        val id = ability.id.toString()
+        val changed = if (disabled) data.disabledAbilities.add(id) else data.disabledAbilities.remove(id)
+        if (changed) data.markDirty()
+    }
+
     override fun tryFire(trigger: AbilityTrigger, ctx: AbilityContext): List<AbilityResult> {
         val now = System.currentTimeMillis()
         val results = ArrayList<AbilityResult>()
         for (ab in registry.forTrigger(trigger)) {
+            if (isDisabled(ctx.player, ab.key)) {
+                results += AbilityResult.Fail(Component.text("Ability disabled"))
+                continue
+            }
+            val unlock = ab.unlockSkill
+            if (unlock != null && skillService.level(ctx.player, unlock) < ab.unlockLevel) {
+                results += AbilityResult.Fail(Component.text("Requires ${unlock.id.value()} ${ab.unlockLevel}"))
+                continue
+            }
             val cdKey = CdKey(ctx.player.uniqueId, ab.key, ab.cooldown.keyScope, null)
             val readyAt = cooldowns[cdKey] ?: 0L
             if (readyAt > now) {
@@ -67,9 +95,22 @@ class AbilityServiceImpl(
             val res = ab.execute(ctx)
             if (res is AbilityResult.Success) {
                 cooldowns[cdKey] = now + ab.cooldown.ticks * 50
+                if (manaCost > 0) awardManaXp(ctx.player, ab.key, manaCost)
+            } else if (res is AbilityResult.Fail) {
+                // refund mana on execute failure (e.g., wrong tool)
+                data.currentMana += manaCost
             }
             results += res
         }
         return results
+    }
+
+    private fun awardManaXp(player: Player, ability: AbilityKey, mana: Double) {
+        val src = object : XpSource {
+            override val key = XpSourceKey.of("ramrpg", "ability_mana_${ability.id.value()}")
+            override val skill = manaXpSkill
+            override fun xp(ctx: XpContext): Double = mana
+        }
+        skillService.addXp(player, src)
     }
 }

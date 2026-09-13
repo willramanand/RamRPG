@@ -77,7 +77,7 @@ class EnchantingListener(
                 merged[k] = next.coerceAtMost(ench.maxLevel)
             }
         }
-        val rename = inv.renameText?.takeIf { it.isNotBlank() }
+        val rename = e.view.renameText?.takeIf { it.isNotBlank() }
         val out = a.clone()
         val written = items.write(out, da.copy(enchantments = merged, customName = rename ?: da.customName))
         e.result = written

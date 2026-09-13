@@ -19,6 +19,7 @@ interface PlatformScheduler {
     fun runForPlayer(player: Player, task: Runnable)
     fun runAtLocation(loc: Location, task: Runnable)
     fun runLaterGlobal(delayTicks: Long, task: Runnable)
+    fun runForPlayerLater(player: Player, delayTicks: Long, task: Runnable)
     fun repeatGlobal(periodTicks: Long, task: () -> Unit): Cancellable
     fun repeatForEntity(e: Entity, periodTicks: Long, task: () -> Unit): Cancellable
 }
@@ -31,6 +32,9 @@ class RamCorePlatformScheduler : PlatformScheduler {
     override fun runAtLocation(loc: Location, task: Runnable) { Schedulers.run(loc, task) }
     override fun runLaterGlobal(delayTicks: Long, task: Runnable) {
         Schedulers.forGlobal().runLater(task, delayTicks)
+    }
+    override fun runForPlayerLater(player: Player, delayTicks: Long, task: Runnable) {
+        Schedulers.forEntity(player).runLater(task, delayTicks)
     }
     override fun repeatGlobal(periodTicks: Long, task: () -> Unit): Cancellable {
         val handle = Schedulers.forGlobal().runRepeating({ _: Task -> task() }, periodTicks, periodTicks)

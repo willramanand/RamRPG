@@ -53,7 +53,7 @@ class NonCombatXpListener(private val skillService: SkillService) {
         Events.subscribe(org.bukkit.event.player.PlayerMoveEvent::class.java).handler { e ->
             if (!e.player.isSprinting) return@handler
             val from = e.from
-            val to = e.to ?: return@handler
+            val to = e.to
             if (from.world != to.world) return@handler
             val dist = from.distanceSquared(to)
             if (dist < 0.04) return@handler

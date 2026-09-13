@@ -111,3 +111,7 @@ buildNumber.properties
 
 # Common working directory
 run/
+
+# Claude Code
+.claude/settings.local.json
+.claude/worktrees/

@@ -20,6 +20,9 @@ import dev.willram.ramrpg.api.skills.SkillRegistry
 import dev.willram.ramrpg.api.skills.SkillService
 import dev.willram.ramrpg.api.skills.XpContext
 import dev.willram.ramrpg.api.skills.XpSource
+import dev.willram.ramrpg.api.abilities.AbilityRegistry
+import dev.willram.ramrpg.api.abilities.AbilityService
+import dev.willram.ramrpg.api.identity.AbilityKey
 import dev.willram.ramrpg.api.sockets.GemKey
 import dev.willram.ramrpg.api.sockets.GemRegistry
 import dev.willram.ramrpg.api.stats.StatDirtyReason
@@ -43,6 +46,8 @@ class SkillsCommand(
     private val reforges: ReforgeRegistry,
     private val gems: GemRegistry,
     private val playerStore: PlayerStore,
+    private val abilities: AbilityRegistry,
+    private val abilityService: AbilityService,
 ) {
 
     fun register(commands: Commands) {
@@ -114,6 +119,13 @@ class SkillsCommand(
                         .then(Commands.literal("clear").executes(::reforgeClearCommand))
                         .then(Commands.argument("name", StringArgumentType.word())
                             .executes(::reforgeCommand))
+                )
+                .then(
+                    Commands.literal("ability")
+                        .then(Commands.literal("list").executes(::abilityListCommand))
+                        .then(Commands.literal("toggle")
+                            .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(::abilityToggleCommand)))
                 )
                 .then(
                     Commands.literal("socket")
@@ -411,7 +423,7 @@ class SkillsCommand(
         val src = object : XpSource {
             override val key = XpSourceKey.of("ramrpg", "command")
             override val skill: SkillKey = resolved
-            override fun xp(c: XpContext): Double = amount.toDouble()
+            override fun xp(ctx: XpContext): Double = amount.toDouble()
         }
         skillService.addXp(p, src)
         p.sendMessage(Component.text("Added $amount xp to ${resolved.id.value()}"))
@@ -428,5 +440,33 @@ class SkillsCommand(
     private fun fail(p: Player, msg: String): Int {
         p.sendMessage(Component.text(msg))
         return 0
+    }
+
+    private fun abilityListCommand(ctx: CommandContext<CommandSourceStack>): Int {
+        val p = ctx.source.sender as? Player ?: return 0
+        val all = abilities.all()
+        if (all.isEmpty()) { p.sendMessage(Component.text("No abilities registered")); return Command.SINGLE_SUCCESS }
+        p.sendMessage(Component.text("Abilities:"))
+        for (ab in all) {
+            val unlock = ab.unlockSkill?.let { sk ->
+                val have = skillService.level(p, sk)
+                val ok = have >= ab.unlockLevel
+                " [${sk.id.value()} ${ab.unlockLevel} ${if (ok) "✓" else "$have"}]"
+            } ?: ""
+            val state = if (abilityService.isDisabled(p, ab.key)) "OFF" else "ON"
+            p.sendMessage(Component.text("- ${ab.key.id.value()} $state$unlock"))
+        }
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun abilityToggleCommand(ctx: CommandContext<CommandSourceStack>): Int {
+        val p = ctx.source.sender as? Player ?: return 0
+        val name = StringArgumentType.getString(ctx, "name").lowercase()
+        val key = AbilityKey(ContentId.of("ramrpg", name))
+        val ab = abilities.get(key) ?: return fail(p, "Unknown ability: $name")
+        val nowDisabled = !abilityService.isDisabled(p, ab.key)
+        abilityService.setDisabled(p, ab.key, nowDisabled)
+        p.sendMessage(Component.text("Ability ${ab.key.id.value()} ${if (nowDisabled) "disabled" else "enabled"}"))
+        return Command.SINGLE_SUCCESS
     }
 }

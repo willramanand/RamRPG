@@ -22,11 +22,11 @@ class EnchantDamageStage(
     override fun apply(ctx: DamageContext) {
         val sources: List<ItemStack> = if (attackerSide) {
             val a = ctx.attacker as? Player ?: return
-            listOf(a.inventory.itemInMainHand, a.inventory.itemInOffHand).filterNotNull()
+            listOf(a.inventory.itemInMainHand, a.inventory.itemInOffHand).filter { !it.type.isAir }
         } else {
             val v = ctx.victim as? Player ?: return
-            val eq = v.equipment ?: return
-            listOf(eq.helmet, eq.chestplate, eq.leggings, eq.boots).filterNotNull()
+            val eq = v.equipment
+            listOfNotNull(eq.helmet, eq.chestplate, eq.leggings, eq.boots).filter { !it.type.isAir }
         }
         for (stack in sources) {
             val data = items.identify(stack) ?: continue

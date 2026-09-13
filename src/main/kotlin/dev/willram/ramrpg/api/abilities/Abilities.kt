@@ -8,6 +8,7 @@ package dev.willram.ramrpg.api.abilities
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.BlockMatcher
 import dev.willram.ramrpg.api.identity.AbilityKey
+import dev.willram.ramrpg.api.identity.SkillKey
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Entity
 import org.bukkit.entity.LivingEntity
@@ -55,6 +56,10 @@ interface Ability {
     val requirements: List<Requirement> get() = emptyList()
     val costs: List<ResourceCost> get() = emptyList()
     val cooldown: Cooldown
+    /** Skill that gates this ability. Null = always unlocked. */
+    val unlockSkill: SkillKey? get() = null
+    /** Minimum level in [unlockSkill] required to use. Ignored when [unlockSkill] is null. */
+    val unlockLevel: Int get() = 0
     fun execute(ctx: AbilityContext): AbilityResult
 }
 
@@ -68,4 +73,6 @@ interface AbilityRegistry {
 
 interface AbilityService {
     fun tryFire(trigger: AbilityTrigger, ctx: AbilityContext): List<AbilityResult>
+    fun isDisabled(player: Player, ability: AbilityKey): Boolean
+    fun setDisabled(player: Player, ability: AbilityKey, disabled: Boolean)
 }

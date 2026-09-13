@@ -56,7 +56,7 @@ class EquipmentStatProvider(
 
     override fun provideStats(ctx: StatContext, output: MutableList<StatModifier>) {
         for (s in equippedStacks(ctx.player)) {
-            if (s == null) continue
+            if (s.type.isAir) continue
             val data = items.identify(s) ?: continue
             val def = defs.get(data.identity.key) ?: continue
             val upgradeMul = 1.0 + data.upgradeLevel * perUpgradeFactor
@@ -76,7 +76,7 @@ class EnchantmentStatProvider(
 ) : StatProvider {
     override fun provideStats(ctx: StatContext, output: MutableList<StatModifier>) {
         for (s in equippedStacks(ctx.player)) {
-            if (s == null) continue
+            if (s.type.isAir) continue
             val data = items.identify(s) ?: continue
             for ((ek, lvl) in data.enchantments) {
                 val ench = enchants.get(ek) ?: continue

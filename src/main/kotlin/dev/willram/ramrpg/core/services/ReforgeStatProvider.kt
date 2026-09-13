@@ -19,7 +19,7 @@ class ReforgeStatProvider(
         val eq = ctx.player.equipment
         val stacks = listOf(eq.itemInMainHand, eq.itemInOffHand, eq.helmet, eq.chestplate, eq.leggings, eq.boots)
         for (s in stacks) {
-            if (s == null) continue
+            if (s.type.isAir) continue
             val data = items.identify(s) ?: continue
             val refKey = data.reforge ?: continue
             val def = defs.get(data.identity.key) ?: continue
