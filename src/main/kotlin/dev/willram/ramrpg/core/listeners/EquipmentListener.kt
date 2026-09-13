@@ -107,6 +107,15 @@ fun requirementStateFor(player: Player, services: ItemRequirementServices?): Ite
  * [dev.willram.ramrpg.api.items.isInert] check) fresh on every call -- there is no separate inert cache to
  * invalidate and no new listener hook needed (rule 2). This class's own constructor is unchanged; see
  * [ItemRequirementServices]'s KDoc for the RamRPG.kt wiring this still needs at merge time.
+ *
+ * **WP-5.3 (armor sets):** `SetStatProvider`'s (`core/services/SetStatProvider.kt`) equipped-member
+ * count rides this EXACT same path -- it is just another `StatProvider` registered on [StatService]
+ * (via `SetModule`, never here or `RamRPG.kt`), so it is re-queried by the SAME
+ * `applyAttributes -> StatService.recalculateNow` this listener already triggers on every
+ * `markDirty(..., StatDirtyReason.EQUIPMENT_CHANGED)` event above. No bespoke set-count hook was added
+ * (rule 2 again), and `SetStatProvider` builds its [ItemRequirementState] via this file's
+ * [requirementStateFor]/[ItemRequirementServices] too, so an unmet-requirement or zero-durability piece
+ * excluded from stats by the four WP-2.1c providers is excluded from a set's member count identically.
  */
 class EquipmentListener(private val stats: StatService) {
 

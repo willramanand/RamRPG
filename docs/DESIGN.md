@@ -32,6 +32,10 @@ damage pipeline, and the dataVersion ledger.
 - [2.1c — Inert item rules](design/2.1c-inert-items.md)
 - [2.2 — Durability drain rates and repair costs](design/2.2-durability.md)
 - [2.3a — Damage types, split rules and resistance formula](design/2.3a-damage-types.md)
+
+## Phase 5
+
+- [5.3 — Set bonus thresholds and shipped sets](design/5.3-armor-sets.md)
 - [1.7b — Service graph, module seams and construction order](design/1.7b-service-graph.md)
 
 ## Phase 0 baseline
