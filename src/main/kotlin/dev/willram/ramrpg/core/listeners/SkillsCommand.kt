@@ -223,7 +223,7 @@ class SkillsCommand(
 
     private fun guiCommand(ctx: CommandContext<CommandSourceStack>): Int {
         val p = ctx.source.sender as? Player ?: return 0
-        SkillsGui(p, skills, skillService, stats).open()
+        SkillsGui.open(p, skills, skillService)
         return Command.SINGLE_SUCCESS
     }
 
@@ -287,7 +287,7 @@ class SkillsCommand(
 
     private fun statsGuiCommand(ctx: CommandContext<CommandSourceStack>): Int {
         val p = ctx.source.sender as? Player ?: return 0
-        StatsGui(p, stats).open()
+        StatsGui.open(p, stats)
         return Command.SINGLE_SUCCESS
     }
 

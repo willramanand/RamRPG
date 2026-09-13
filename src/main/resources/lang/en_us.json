@@ -11,6 +11,7 @@
   "ramrpg.skill.level_up_message": "{0} → Lv {1}",
   "ramrpg.skill.level_up_subtitle": "{0} Lv {1}",
   "ramrpg.skill.milestone": "Milestone! {0} Lv {1}",
+  "ramrpg.skills.gui.title": "Skills",
   "ramrpg.stat.attack_speed": "Attack Speed",
   "ramrpg.stat.crit_chance": "Crit Chance",
   "ramrpg.stat.crit_damage": "Crit Damage",
@@ -24,5 +25,6 @@
   "ramrpg.stat.speed": "Speed",
   "ramrpg.stat.strength": "Strength",
   "ramrpg.stat.true_defense": "True Defense",
-  "ramrpg.stat.wisdom": "Wisdom"
+  "ramrpg.stat.wisdom": "Wisdom",
+  "ramrpg.stats.gui.title": "Stats"
 }
