@@ -6,9 +6,12 @@
  * as raw amounts; the registrar attaches the `ModifierSource` (this item) when it builds the
  * StatModifier list.
  *
- * SEAM (WP-1.5b): items will also carry an `effects = [...]` bundle. 1.5a intentionally does NOT read
- * or model effects -- the EffectSpec schema and EffectActionRegistry are WP-1.5b's job. Leaving the
- * key unread here keeps the deserializer forward-compatible: adding effect parsing later is additive.
+ * SEAM (WP-1.5b, now filled): items carry an `effects = [...]` bundle, parsed by [EffectSpec] into
+ * concrete [Effect]s and held on [effects]. Deserialization takes an optional [EffectSpec.Registries]:
+ * absent (the legacy `RpgContentLoader.load(root)` path) -> no effects; present (the ContentModule path
+ * with builtins registered) -> the bundle resolves. Surfacing these onto the live
+ * [dev.willram.ramrpg.api.items.ItemDefinition.effects] belongs to [ContentRegistrarRpg] (out of this
+ * WP's file scope); the spec captures them so that later wiring is a one-line registrar change.
  *
  * HOCON shape (namespaced ids/keys MUST be quoted -- ':' is a HOCON separator):
  * ```
@@ -29,6 +32,7 @@ package dev.willram.ramrpg.core.config.specs
 
 import dev.willram.ramcore.content.ContentDeserializeException
 import dev.willram.ramcore.content.ContentId
+import dev.willram.ramrpg.api.effects.Effect
 import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.items.ItemCategory
@@ -53,11 +57,13 @@ data class ItemSpec(
     val maxStack: Int?,
     val customModelData: Int?,
     val allowVanillaWrapper: Boolean,
+    /** WP-1.5b: the item's parsed effect bundle (empty when loaded without effect registries). */
+    val effects: List<Effect> = emptyList(),
 ) : RpgContentSpec {
     override val id: ContentId get() = key.id
 
     companion object {
-        fun deserialize(node: ConfigurationNode): ItemSpec {
+        fun deserialize(node: ConfigurationNode, effects: EffectSpec.Registries? = null): ItemSpec {
             val id = SpecNodes.requireId(node)
             return ItemSpec(
                 key = ItemKey(id),
@@ -71,6 +77,7 @@ data class ItemSpec(
                 maxStack = SpecNodes.intOrNull(node, "max-stack"),
                 customModelData = SpecNodes.intOrNull(node, "custom-model-data"),
                 allowVanillaWrapper = SpecNodes.boolOr(node, "allow-vanilla-wrapper", false),
+                effects = EffectSpec.bundle(node, "effects", id, effects),
             )
         }
 

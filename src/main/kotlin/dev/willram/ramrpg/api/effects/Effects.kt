@@ -50,6 +50,12 @@ sealed interface EffectTrigger {
     data class OnInteract(val type: InteractType) : EffectTrigger
     data class OnBlockBreak(val matcher: BlockMatcher) : EffectTrigger
     data object Tick : EffectTrigger
+    /**
+     * Fired when a player finishes consuming an item (food/potion). Added by WP-1.5b as the sanctioned,
+     * purely-additive extension of this sealed hierarchy (no existing case is removed or renamed, so no
+     * `@Deprecated(ReplaceWith)` cycle is required). Task 4.2 (potions) is the intended first consumer.
+     */
+    data object OnConsume : EffectTrigger
     data class Custom(val key: ContentId) : EffectTrigger
 }
 

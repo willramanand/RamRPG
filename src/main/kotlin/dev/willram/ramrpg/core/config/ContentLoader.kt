@@ -27,6 +27,7 @@ import dev.willram.ramcore.content.SpecLoadResult
 import dev.willram.ramcore.content.SpecLoader
 import dev.willram.ramcore.exception.ValidationError
 import dev.willram.ramrpg.api.identity.StatKey
+import dev.willram.ramrpg.core.config.specs.EffectSpec
 import dev.willram.ramrpg.core.config.specs.EnchantSpec
 import dev.willram.ramrpg.core.config.specs.EntityProfileSpec
 import dev.willram.ramrpg.core.config.specs.GemSpec
@@ -108,8 +109,14 @@ object RpgContentLoader {
      * the types it cares about); RamRPG instead treats such a directory as authoring error, so the
      * final error list = (parse + inheritance + deserialize errors from RamCore) + (unknown-type
      * errors added here). Never throws.
+     *
+     * WP-1.5b: items and enchants may carry an `effects = [...]` bundle. [effects] supplies the three
+     * registries those bundles resolve against (actions / conditions / block-matchers). It is optional:
+     * `load(root)` (no registries) parses everything EXCEPT effects, which keeps every effect-free
+     * caller working; ContentModule passes the builtin-populated registries so effect bundles resolve
+     * and any unknown action/condition/matcher id aggregates as a source-tagged [ValidationError].
      */
-    fun load(root: Path): RpgContentLoadResult {
+    fun load(root: Path, effects: EffectSpec.Registries? = null): RpgContentLoadResult {
         // 1. RamCore parses files, resolves `extends:` deep-merge, and collects parse / missing-parent
         //    / cycle / duplicate-id errors -- each already carrying its SourceRef. Never throws.
         val content: ContentLoadResult = ContentLoader.load(root)
@@ -119,9 +126,9 @@ object RpgContentLoader {
         //    errors() already carry over content.errors(), so we do not add them again.
         val specResult: SpecLoadResult = SpecLoader.create()
             .deserializer(TYPE_STATS, ContentDeserializer { StatSpec.deserialize(it) })
-            .deserializer(TYPE_ITEMS, ContentDeserializer { ItemSpec.deserialize(it) })
+            .deserializer(TYPE_ITEMS, ContentDeserializer { ItemSpec.deserialize(it, effects) })
             .deserializer(TYPE_SKILLS, ContentDeserializer { SkillSpec.deserialize(it) })
-            .deserializer(TYPE_ENCHANTS, ContentDeserializer { EnchantSpec.deserialize(it) })
+            .deserializer(TYPE_ENCHANTS, ContentDeserializer { EnchantSpec.deserialize(it, effects) })
             .deserializer(TYPE_ENTITIES, ContentDeserializer { EntityProfileSpec.deserialize(it) })
             .deserializer(TYPE_REFORGES, ContentDeserializer { ReforgeSpec.deserialize(it) })
             .deserializer(TYPE_GEMS, ContentDeserializer { GemSpec.deserialize(it) })

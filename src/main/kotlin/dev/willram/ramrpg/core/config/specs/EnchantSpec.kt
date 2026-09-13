@@ -3,10 +3,13 @@
  * Bukkit-free interface (its one Bukkit-touching method, `xpCost(level, EnchantingContext)`, keeps its
  * interface default here), so [toEnchantment] returns a pure implementation from this file.
  *
- * SEAM (WP-1.5b): an enchant's gameplay is a bundle of [dev.willram.ramrpg.api.effects.Effect]s. 1.5a
- * does NOT model the effect schema, so [SpecEnchantment.effects] returns an empty list for every
- * level. WP-1.5b fills this by parsing an `effects = [...]` bundle into the spec and returning it
- * (scaled by level) here -- an additive change that does not alter this file's shape.
+ * SEAM (WP-1.5b, now filled): an enchant's gameplay is a bundle of [dev.willram.ramrpg.api.effects.Effect]s.
+ * [EffectSpec] parses the `effects = [...]` bundle into [effects] and [SpecEnchantment.effects] returns
+ * it. Level does not re-parse the bundle: a [dev.willram.ramrpg.api.effects.StatEffect]'s amount is a
+ * [dev.willram.ramrpg.api.effects.ScalingFormula] evaluated with the holder's level at apply time (the
+ * same contract the Kotlin builtins use, e.g. `Scaling.linear`), so `effects(level)` returns the parsed
+ * list unchanged. Deserialization takes an optional [EffectSpec.Registries]: absent -> no effects;
+ * present (ContentModule, builtins registered) -> the bundle resolves and unknown ids aggregate.
  *
  * HOCON shape:
  * ```
@@ -40,6 +43,8 @@ data class EnchantSpec(
     val rarity: EnchantmentRarity,
     val description: List<Component>,
     val conflictsWith: Set<EnchantmentKey>,
+    /** WP-1.5b: the enchant's parsed effect bundle (empty when loaded without effect registries). */
+    val effects: List<Effect> = emptyList(),
 ) : RpgContentSpec {
     override val id: ContentId get() = key.id
 
@@ -57,14 +62,14 @@ data class EnchantSpec(
         override val targets: Set<ItemCategory> get() = spec.targets
         override val rarity: EnchantmentRarity get() = spec.rarity
         override fun description(level: Int): List<Component> = spec.description
-        override fun effects(level: Int): List<Effect> = emptyList()
+        override fun effects(level: Int): List<Effect> = spec.effects
         override fun conflicts(other: EnchantmentKey): Boolean = other in spec.conflictsWith
     }
 
     companion object {
         private const val DEFAULT_MAX_LEVEL = 1
 
-        fun deserialize(node: ConfigurationNode): EnchantSpec {
+        fun deserialize(node: ConfigurationNode, effects: EffectSpec.Registries? = null): EnchantSpec {
             val id = SpecNodes.requireId(node)
             return EnchantSpec(
                 key = EnchantmentKey(id),
@@ -76,6 +81,7 @@ data class EnchantSpec(
                 conflictsWith = SpecNodes.stringList(node, "conflicts-with")
                     .map { EnchantmentKey(SpecNodes.parseId(it, "conflicts-with id")) }
                     .toSet(),
+                effects = EffectSpec.bundle(node, "effects", id, effects),
             )
         }
     }
