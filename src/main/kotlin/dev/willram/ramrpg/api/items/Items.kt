@@ -8,6 +8,8 @@ package dev.willram.ramrpg.api.items
 
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramrpg.api.effects.Effect
+import dev.willram.ramrpg.api.effects.ScalingContext
+import dev.willram.ramrpg.api.effects.StatEffect
 import dev.willram.ramrpg.api.identity.DamageTypeKey
 import dev.willram.ramrpg.api.identity.EnchantmentKey
 import dev.willram.ramrpg.api.identity.ItemKey
@@ -192,6 +194,21 @@ data class ItemInstanceInit(
     val quality: Double? = null,
 )
 
+/**
+ * WP-5.3: what [LoreSection.SetBonus] needs to render one item's set-bonus block for a viewer -- the
+ * owning set's display name, its total member count, the viewer's current ACTIVE (non-inert, per
+ * `SetStatProvider`'s own count) member count, and the full threshold -> effects map (only
+ * [StatEffect] entries are rendered, mirroring `SetStatProvider`'s stats-only contract). Thresholds
+ * render ascending; a threshold whose count is `<= activeCount` is "active" (lit), otherwise
+ * "inactive" (dimmed) -- see docs/design/5.3-armor-sets.md.
+ */
+data class SetLoreInfo(
+    val displayName: Component,
+    val totalMembers: Int,
+    val activeCount: Int,
+    val thresholds: Map<Int, List<Effect>>,
+)
+
 data class LoreContext(
     val definition: ItemDefinition,
     val instance: ItemInstanceData,
@@ -212,6 +229,14 @@ data class LoreContext(
      * because the real state wasn't wired in.
      */
     val requirementState: ItemRequirementState? = null,
+    /**
+     * WP-5.3: this item's set-bonus block, or `null` when it is not a set member, OR (matching the
+     * WP-2.1c `requirementState` precedent above) no caller has wired live set data in yet -- rendering
+     * live per-viewer set progress into `PacketItemRenderer.kt` is left to a future WP, same as
+     * `requirementState`'s own wiring gap. `null` renders nothing (there is no "unmet" fail-closed
+     * banner for this section -- a non-member item legitimately has nothing to show).
+     */
+    val setBonus: SetLoreInfo? = null,
 ) {
     /** Resolves a Component through viewer locale via Adventure GlobalTranslator. */
     fun localize(c: Component): Component {
@@ -230,6 +255,10 @@ sealed interface LoreSection {
     data object EffectsHint : LoreSection { override fun render(ctx: LoreContext) = LoreRender.effectsHint(ctx) }
     data object ReforgeLine : LoreSection { override fun render(ctx: LoreContext) = LoreRender.reforge(ctx) }
     data object SocketsLine : LoreSection { override fun render(ctx: LoreContext) = LoreRender.sockets(ctx) }
+    /** WP-5.3: "Name (active/total)" header plus one line per set threshold (lit when active, dimmed
+     *  when not), from [LoreContext.setBonus]. Renders nothing when the item is not a set member / no
+     *  live set data is wired in yet. */
+    data object SetBonus : LoreSection { override fun render(ctx: LoreContext) = LoreRender.setBonus(ctx) }
     /** WP-2.1c: one line per [ItemDefinition.requirements] entry (met/unmet styling), plus an inert banner. */
     data object Requirements : LoreSection { override fun render(ctx: LoreContext) = LoreRender.requirements(ctx) }
     /** WP-2.1c: the [ItemDefinition.itemLevel] line. */
@@ -300,6 +329,51 @@ internal object LoreRender {
                     .append(ctx.localize(raw).color(NamedTextColor.LIGHT_PURPLE))
                     .append(Component.text(" ]", NamedTextColor.DARK_GRAY))
                     .build()
+            }
+        }
+        return out
+    }
+
+    /**
+     * WP-5.3: "Name (active/total)" header, then one line per threshold ascending -- GREEN/lit when
+     * `count <= activeCount`, DARK_GRAY/dimmed otherwise -- followed by each threshold's [StatEffect]
+     * lines (stat name + signed amount), reusing the SAME [LoreContext.statNameLookup]/[statFormatLookup]
+     * the [stats] section uses. `activeCount` seeds the [ScalingContext.level] a threshold's amount
+     * evaluates with, mirroring `SetStatProvider.setStatsFor`'s own scaling contract exactly.
+     */
+    fun setBonus(ctx: LoreContext): List<Component> {
+        val info = ctx.setBonus ?: return emptyList()
+        val out = ArrayList<Component>(info.thresholds.size + 1)
+        out += Component.text("")
+            .append(ctx.localize(Component.translatable(
+                "ramrpg.set.progress",
+                info.displayName,
+                Component.text(info.activeCount),
+                Component.text(info.totalMembers),
+            )))
+            .color(NamedTextColor.YELLOW)
+        for (count in info.thresholds.keys.sorted()) {
+            val active = count <= info.activeCount
+            val color = if (active) NamedTextColor.GREEN else NamedTextColor.DARK_GRAY
+            out += Component.text("")
+                .append(ctx.localize(Component.translatable("ramrpg.set.threshold", Component.text(count))))
+                .color(color)
+            val scaleCtx = object : ScalingContext {
+                override val level: Int = count
+                override fun statValue(key: StatKey): Double = 0.0
+                override fun extra(key: String): Double? = null
+            }
+            for (eff in info.thresholds.getValue(count)) {
+                if (eff !is StatEffect) continue
+                val name = ctx.localize(ctx.statNameLookup(eff.stat) ?: Component.text(eff.stat.id.value()))
+                val amount = eff.amount.eval(scaleCtx)
+                val sign = if (amount >= 0) "+" else ""
+                val value = ctx.statFormatLookup(eff.stat).format(amount)
+                out += Component.text("  ")
+                    .append(name.color(color))
+                    .append(Component.text(": "))
+                    .append(Component.text("$sign$value").color(color))
+                    .color(color)
             }
         }
         return out
@@ -408,6 +482,7 @@ class LoreTemplate(private val sections: List<LoreSection>) {
             LoreSection.Stats,
             LoreSection.ReforgeLine,
             LoreSection.SocketsLine,
+            LoreSection.SetBonus,
             LoreSection.Description,
             LoreSection.Enchantments,
             LoreSection.Requirements,

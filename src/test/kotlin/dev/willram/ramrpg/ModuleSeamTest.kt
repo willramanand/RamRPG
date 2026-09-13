@@ -11,7 +11,6 @@ import dev.willram.ramrpg.core.modules.MobModule
 import dev.willram.ramrpg.core.modules.PerkModule
 import dev.willram.ramrpg.core.modules.RpgModules
 import dev.willram.ramrpg.core.modules.ScheduleModule
-import dev.willram.ramrpg.core.modules.SetModule
 import dev.willram.ramrpg.core.modules.VendorModule
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,17 +25,18 @@ import org.junit.jupiter.api.Test
  * Bukkit) is not invoked.
  *
  * WP-1.5a populated the ContentModule seam (the HOCON ContentLoader), moving it from the seeded-empty
- * set to the populated set: seven populated, nine seeded empty.
+ * set to the populated set. WP-5.3 does the same for SetModule (armor sets): eight populated, eight
+ * seeded empty.
  */
 class ModuleSeamTest {
 
     private val expectedPopulated = setOf(
         "LootModule", "QuestModule", "RewardModule", "CombatModule", "EconomyModule", "UiModule",
-        "ContentModule",
+        "ContentModule", "SetModule",
     )
 
     private val expectedEmpty = setOf(
-        "CraftingModule", "SetModule", "BuffModule", "PerkModule",
+        "CraftingModule", "BuffModule", "PerkModule",
         "MobModule", "BossModule", "VendorModule", "DungeonModule", "ScheduleModule",
     )
 
@@ -45,25 +45,25 @@ class ModuleSeamTest {
         val modules = RpgModules.all(TestServiceContext.withRegistry())
         val names = modules.map { it::class.simpleName }
 
-        assertEquals(16, modules.size, "expected 7 populated + 9 seeded-empty module seams")
+        assertEquals(16, modules.size, "expected 8 populated + 8 seeded-empty module seams")
         assertEquals(names.size, names.toSet().size, "no module may be bound (listed) twice")
         assertEquals(expectedPopulated + expectedEmpty, names.toSet(), "module set must equal the reserved list")
     }
 
     @Test
-    fun `the split is six populated and ten seeded-empty seams`() {
+    fun `the split is eight populated and eight seeded-empty seams`() {
         val names = RpgModules.all(TestServiceContext.withRegistry()).map { it::class.simpleName }.toSet()
         assertEquals(expectedPopulated, names intersect expectedPopulated)
         assertEquals(expectedEmpty, names intersect expectedEmpty)
-        assertEquals(7, expectedPopulated.size)
-        assertEquals(9, expectedEmpty.size)
+        assertEquals(8, expectedPopulated.size)
+        assertEquals(8, expectedEmpty.size)
     }
 
     @Test
     fun `seeded-empty modules bind nothing`() {
         val ctx = TestServiceContext.withRegistry()
         val emptyModules: List<TerminableModule> = listOf(
-            CraftingModule(ctx), SetModule(ctx), BuffModule(ctx), PerkModule(ctx),
+            CraftingModule(ctx), BuffModule(ctx), PerkModule(ctx),
             MobModule(ctx), BossModule(ctx), VendorModule(ctx), DungeonModule(ctx), ScheduleModule(ctx),
         )
         for (module in emptyModules) {

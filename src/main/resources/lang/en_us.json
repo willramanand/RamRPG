@@ -39,6 +39,8 @@
   "ramrpg.rpg.reload.stats_orphaned": "{0} removed stat definition(s) could not be unregistered; a server restart is required to fully clear them",
   "ramrpg.rpg.validate.clean": "No errors found in {0}",
   "ramrpg.rpg.validate.errors": "{0} error(s) found in {1}",
+  "ramrpg.set.progress": "{0} ({1}/{2})",
+  "ramrpg.set.threshold": "{0} Pieces",
   "ramrpg.skill.level_up": "Level Up!",
   "ramrpg.skill.level_up_message": "{0} → Lv {1}",
   "ramrpg.skill.level_up_subtitle": "{0} Lv {1}",

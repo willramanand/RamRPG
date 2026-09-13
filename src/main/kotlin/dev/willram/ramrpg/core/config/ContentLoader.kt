@@ -7,8 +7,10 @@
  * deliberately leaves open: an unknown content directory is an error here (see [load]).
  *
  * The directory name is the content type: `items/`, `enchants/`, `entities/`, `reforges/`, `gems/`,
- * `skills/`, `stats/`. Every error carries its [dev.willram.ramcore.content.SourceRef] (file + path)
- * and errors AGGREGATE -- three broken files yield three [ValidationError]s, never a thrown exception.
+ * `skills/`, `stats/`, `sets/` (WP-5.3). Every error carries its [dev.willram.ramcore.content.SourceRef]
+ * (file + path) and errors AGGREGATE -- three broken files yield three [ValidationError]s, never a
+ * thrown exception. Unlike the other six, `sets/` is parsed here but registered by `SetModule`, not
+ * [ContentRegistrarRpg] -- see [RpgContentLoadResult.sets]'s KDoc.
  *
  * Spec types stay PURE (no Bukkit) so they unit-test off-server; the single Bukkit dependency an item
  * carries (its `Material`) is resolved by [ContentRegistrarRpg] on the server, not here. This whole
@@ -33,6 +35,7 @@ import dev.willram.ramrpg.core.config.specs.EntityProfileSpec
 import dev.willram.ramrpg.core.config.specs.GemSpec
 import dev.willram.ramrpg.core.config.specs.ItemSpec
 import dev.willram.ramrpg.core.config.specs.ReforgeSpec
+import dev.willram.ramrpg.core.config.specs.SetSpec
 import dev.willram.ramrpg.core.config.specs.SkillSpec
 import dev.willram.ramrpg.core.config.specs.StatSpec
 import net.kyori.adventure.text.Component
@@ -64,15 +67,18 @@ class RpgContentLoadResult internal constructor(
     val entities: List<EntityProfileSpec>,
     val reforges: List<ReforgeSpec>,
     val gems: List<GemSpec>,
+    /** WP-5.3: parsed `sets/` entries. See [ContentRegistrarRpg] note -- unlike the six types above,
+     *  registering these into a live registry is `SetModule`'s job, not `ContentRegistrarRpg`'s. */
+    val sets: List<SetSpec> = emptyList(),
     private val errorList: List<ValidationError>,
     private val sources: Map<ContentId, SourceRef> = emptyMap(),
 ) {
     /** Every spec that loaded cleanly, across all types, in a single flat list. */
     fun definitions(): List<RpgContentSpec> =
         ArrayList<RpgContentSpec>(stats.size + items.size + skills.size + enchants.size +
-            entities.size + reforges.size + gems.size).apply {
+            entities.size + reforges.size + gems.size + sets.size).apply {
             addAll(stats); addAll(items); addAll(skills); addAll(enchants)
-            addAll(entities); addAll(reforges); addAll(gems)
+            addAll(entities); addAll(reforges); addAll(gems); addAll(sets)
         }
 
     /** Every error, each with a [dev.willram.ramcore.content.SourceRef] (file + path). */
@@ -98,10 +104,12 @@ object RpgContentLoader {
     const val TYPE_ENTITIES = "entities"
     const val TYPE_REFORGES = "reforges"
     const val TYPE_GEMS = "gems"
+    /** WP-5.3: armor set definitions -- parsed here (mirroring items/enchants), registered by `SetModule`. */
+    const val TYPE_SETS = "sets"
 
     /** The directory names this loader recognises. A directory not in this set is an error. */
     val KNOWN_TYPES: Set<String> = linkedSetOf(
-        TYPE_STATS, TYPE_ITEMS, TYPE_SKILLS, TYPE_ENCHANTS, TYPE_ENTITIES, TYPE_REFORGES, TYPE_GEMS,
+        TYPE_STATS, TYPE_ITEMS, TYPE_SKILLS, TYPE_ENCHANTS, TYPE_ENTITIES, TYPE_REFORGES, TYPE_GEMS, TYPE_SETS,
     )
 
     /**
@@ -136,6 +144,7 @@ object RpgContentLoader {
             .deserializer(TYPE_ENTITIES, ContentDeserializer { EntityProfileSpec.deserialize(it) })
             .deserializer(TYPE_REFORGES, ContentDeserializer { ReforgeSpec.deserialize(it) })
             .deserializer(TYPE_GEMS, ContentDeserializer { GemSpec.deserialize(it) })
+            .deserializer(TYPE_SETS, ContentDeserializer { SetSpec.deserialize(it, effects) })
             .deserialize(content)
 
         // 3. RamRPG policy: a parsed definition whose type (directory) we do not recognise is an error
@@ -166,6 +175,7 @@ object RpgContentLoader {
             entities = specResult.ofType(TYPE_ENTITIES, EntityProfileSpec::class.java),
             reforges = specResult.ofType(TYPE_REFORGES, ReforgeSpec::class.java),
             gems = specResult.ofType(TYPE_GEMS, GemSpec::class.java),
+            sets = specResult.ofType(TYPE_SETS, SetSpec::class.java),
             errorList = errors,
             sources = sources,
         )
@@ -186,7 +196,7 @@ object RpgContentLoader {
      * comment. [extractPackagedContent] splits each keyed child back into its own real,
      * independently-valid `<type>/<slug>.conf` file before RamCore's ContentLoader ever sees it.
      */
-    private val PACKAGED_CONTENT: List<String> = listOf("items/builtin.conf")
+    private val PACKAGED_CONTENT: List<String> = listOf("items/builtin.conf", "sets/builtin.conf")
 
     /**
      * WP-1.5d: first-run resource extraction. For every path in [PACKAGED_CONTENT], parses the packaged

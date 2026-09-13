@@ -37,6 +37,7 @@ Run each in-game as an op. `[P]` = Paper expectation, `[F]` = Folia expectation.
 | 7 | Skills tree GUI | `/skills` tree view | Paginated skill tree opens through the RamCore menu; navigation works; no legacy `menu.Gui` | same; menu handled on the player thread | ☐ |
 | 8 | Requirement-gated equipment goes inert below level (WP-2.1c) | equip an item whose `requirements` you don't meet | Item equips but contributes no stats (equipment/enchant/reforge/socket) and its lore shows the unmet requirement(s) in red plus an inert banner; meeting the requirement later (e.g. leveling the skill) and re-equipping restores full stats | same; the equipment-change stat refresh runs on the player's region thread | ☐ |
 | 9 | Durability drains, goes inert at zero, never breaks (WP-2.2) | use an RPG weapon until it hits 0 durability | Weapon's durability lore counts down on each hit; at 0 it goes inert (greys out / red durability line + inert banner, contributes no stats) but stays in your hand — it never breaks or disappears, and vanilla's own durability/break behaviour never applies to it | same; the drain runs in the pipeline on the attacker's/victim's own region thread | ☐ |
+| 10 | Armor set bonus activates at member-count thresholds (WP-5.3) | equip a 4-piece set | the set bonus activates and shows in lore/stats | same; the set-count recompute runs on the equipping player's region thread with no thread error | ☐ |
 
 ## Cross-cutting checks
 
