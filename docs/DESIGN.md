@@ -37,6 +37,7 @@ damage pipeline, and the dataVersion ledger.
 ## Phase 3
 
 - [3.0 — Command surface and the /skills deprecation map](design/3.0-command-surface.md)
+- [3.1a — Station and recipe model; quality roll formula; critical-craft chance](design/3.1a-crafting-model.md)
 
 ## Phase 5
 
