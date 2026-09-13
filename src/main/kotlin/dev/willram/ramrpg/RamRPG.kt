@@ -25,6 +25,7 @@ import dev.willram.ramrpg.core.listeners.EntitySpawnListener
 import dev.willram.ramrpg.core.listeners.EquipmentListener
 import dev.willram.ramrpg.core.listeners.FortuneListener
 import dev.willram.ramrpg.core.listeners.InventoryRefreshListener
+import dev.willram.ramrpg.core.listeners.ItemRequirementServices
 import dev.willram.ramrpg.core.listeners.ManaRegen
 import dev.willram.ramrpg.core.listeners.MythicIntegration
 import dev.willram.ramrpg.core.listeners.NonCombatXpListener
@@ -326,11 +327,17 @@ class RamRPG : RamPlugin() {
         val enchantments = service(RpgServiceKeys.ENCHANTMENTS)
         val reforges = service(RpgServiceKeys.REFORGES)
         val gems = service(RpgServiceKeys.GEMS)
+        // WP-2.1c: every item-based provider must receive the definition registry + requirement services
+        // so inert items (unmet requirement / zero durability) contribute nothing. Enchantment/Socket
+        // providers fail OPEN when their `defs` is null, so passing itemDefs to ALL FOUR here is a
+        // security requirement, not a convenience. (Orchestrator bootstrap wiring at merge — the
+        // providers are constructed here, not in a module; see the B5 note in the wave-progress memory.)
+        val reqServices = ItemRequirementServices(skillRegistry, skillService, stats)
         stats.registerProvider(SkillStatProvider(skillRegistry, skillService), owner)
-        stats.registerProvider(EquipmentStatProvider(itemInstances, itemDefs), owner)
-        stats.registerProvider(EnchantmentStatProvider(itemInstances, enchantments), owner)
-        stats.registerProvider(ReforgeStatProvider(itemInstances, itemDefs, reforges), owner)
-        stats.registerProvider(SocketStatProvider(itemInstances, gems), owner)
+        stats.registerProvider(EquipmentStatProvider(itemInstances, itemDefs, reqServices), owner)
+        stats.registerProvider(EnchantmentStatProvider(itemInstances, enchantments, itemDefs, reqServices), owner)
+        stats.registerProvider(ReforgeStatProvider(itemInstances, itemDefs, reforges, reqServices), owner)
+        stats.registerProvider(SocketStatProvider(itemInstances, gems, itemDefs, reqServices), owner)
     }
 
     private fun handleLevelUp(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {

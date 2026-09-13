@@ -5,6 +5,12 @@ import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent
 import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.terminable.TerminableConsumer
+import dev.willram.ramrpg.api.identity.SkillKey
+import dev.willram.ramrpg.api.identity.StatKey
+import dev.willram.ramrpg.api.items.ItemRequirementState
+import dev.willram.ramrpg.api.skills.SkillRegistry
+import dev.willram.ramrpg.api.skills.SkillService
+import dev.willram.ramrpg.api.skills.StatPerLevelReward
 import dev.willram.ramrpg.api.stats.StatDirtyReason
 import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.builtin.identity.RamStats
@@ -39,6 +45,69 @@ fun applyPlayerAttributes(stats: StatService, player: Player, setHealth: Boolean
     player.healthScale = 20.0
 }
 
+/**
+ * WP-2.1c: the RamCore-backed services [requirementStateFor] needs to build a live [ItemRequirementState]
+ * for the wearer -- see `docs/design/2.1c-inert-items.md`.
+ *
+ * These are threaded into the four item-based `StatProvider`s (`EquipmentStatProvider`,
+ * `EnchantmentStatProvider`, `ReforgeStatProvider`, `SocketStatProvider` in `core/services`) as an
+ * OPTIONAL trailing constructor parameter rather than this file wiring them in directly, because every
+ * one of those providers' construction call sites lives in `RamRPG.kt`, which this WP's file scope (rule
+ * 8/B5) forbids touching. Until the orchestrator passes a real instance at those call sites (a one-line
+ * change per provider, at merge time), [requirementStateFor] runs fail-closed -- see its KDoc.
+ */
+class ItemRequirementServices(
+    val skillRegistry: SkillRegistry,
+    val skillService: SkillService,
+    val stats: StatService,
+)
+
+/**
+ * WP-2.1c: builds the [ItemRequirementState] for [player] that every item-based `StatProvider` (and
+ * lore rendering) evaluates a candidate item's [dev.willram.ramrpg.api.items.ItemRequirement]s against.
+ * See `docs/design/2.1c-inert-items.md` for the full "no-self-satisfaction" rationale; summary:
+ *
+ * - [ItemRequirementState.skillLevel] reads [SkillService.level] directly -- skill levels are entirely
+ *   item-independent (WP-2.1a), so this is always safe, with or without [services].
+ * - [ItemRequirementState.statValue] returns the stat's registered `defaultBase` plus each skill's
+ *   per-level [StatPerLevelReward] contribution (the same math `SkillStatProvider` applies) --
+ *   DELIBERATELY excluding every item-based `StatProvider`'s contribution, including the candidate
+ *   item's own. An item's own stats (or any other equipped item's stats) can therefore never help satisfy
+ *   a `StatThreshold` requirement -- closing the self-satisfaction exploit this WP calls out. This also
+ *   means the check never calls back into [StatService] (no snapshot/recalculate), so it is safe to run
+ *   from inside a `StatProvider.provideStats` without recursing into the provider list.
+ *
+ * When [services] is `null` (not yet wired at the caller's construction site -- see [ItemRequirementServices]),
+ * every check fails closed: `skillLevel` reads `0` and `statValue` reads `0.0`, so a non-trivial
+ * requirement is UNMET rather than silently vanishing -- mirroring [dev.willram.ramrpg.api.items.ItemRequirement.PerkOwned]'s
+ * fail-closed stub from WP-2.1a.
+ */
+fun requirementStateFor(player: Player, services: ItemRequirementServices?): ItemRequirementState =
+    object : ItemRequirementState {
+        override fun skillLevel(skill: SkillKey): Int = services?.skillService?.level(player, skill) ?: 0
+
+        override fun statValue(stat: StatKey): Double {
+            val svc = services ?: return 0.0
+            var value = svc.stats.definition(stat)?.defaultBase ?: 0.0
+            for (def in svc.skillRegistry.all()) {
+                val lvl = svc.skillService.level(player, def.key) - 1
+                if (lvl <= 0) continue
+                for (r in def.rewards) {
+                    if (r is StatPerLevelReward && r.stat == stat) value += lvl * r.amountPerLevel
+                }
+            }
+            return value
+        }
+    }
+
+/**
+ * WP-2.1c: equipment-change events already recalculate stats ([applyAttributes] -> [StatService.recalculateNow])
+ * on every event this listener handles; that recalculation is what "refreshes" inert-ness, since the four
+ * item-based `StatProvider`s consult [requirementStateFor] (via the shared
+ * [dev.willram.ramrpg.api.items.isInert] check) fresh on every call -- there is no separate inert cache to
+ * invalidate and no new listener hook needed (rule 2). This class's own constructor is unchanged; see
+ * [ItemRequirementServices]'s KDoc for the RamRPG.kt wiring this still needs at merge time.
+ */
 class EquipmentListener(private val stats: StatService) {
 
     fun register(consumer: TerminableConsumer) {
