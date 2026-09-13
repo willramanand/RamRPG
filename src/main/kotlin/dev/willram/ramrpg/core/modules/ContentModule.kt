@@ -26,6 +26,9 @@
  *    `LifecycleEvents.COMMANDS`, the same lifecycle hook `RamPlugin#onEnable` uses for
  *    `RamRPG.registerCommands` -- Paper allows multiple handlers for that event, so this reaches the
  *    server without ever touching `RamRPG.kt` (B5), exactly like the loader wiring above.
+ *  - WP-3.0: [RpgCommand] is now the SOLE `/rpg` root and also registers the deprecated `/skills` alias
+ *    (see its KDoc), so this is the one place in the plugin that constructs it -- with the game services
+ *    it needs in addition to the validate/reload callbacks.
  */
 package dev.willram.ramrpg.core.modules
 
@@ -176,10 +179,28 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
         // -- rather than through that override, so this command reaches the server without ever adding
         // a line to RamRPG.kt (B5). Paper's LifecycleEventManager supports more than one COMMANDS
         // handler; this one fires alongside RamRPG's.
+        //
+        // WP-3.0: RpgCommand also owns every other game command (stats/skills/quests/perks/admin) plus
+        // the deprecated /skills alias, so it needs the game services too -- resolved here the same way
+        // items/skills/enchants/reforges/gems/stats already are above; the rest are one-off local vals
+        // since nothing else in this module needs them.
         val rpgCommand = RpgCommand(
             defaultDir = contentDir.toPath(),
             validate = ::validate,
             reload = ::reload,
+            skills = skills,
+            skillService = ctx.service(RpgServiceKeys.SKILL_SERVICE),
+            stats = stats,
+            enchants = enchants,
+            items = ctx.service(RpgServiceKeys.ITEM_INSTANCES),
+            itemDefs = items,
+            reforges = reforges,
+            gems = gems,
+            playerStore = ctx.service(RpgServiceKeys.PLAYER_STORE),
+            abilities = ctx.service(RpgServiceKeys.ABILITIES),
+            abilityService = ctx.service(RpgServiceKeys.ABILITY_SERVICE),
+            quests = ctx.service(RpgServiceKeys.QUESTS),
+            questRegistry = ctx.service(RpgServiceKeys.QUEST_REGISTRY),
         )
         plugin.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             rpgCommand.register(event.registrar())
