@@ -5,22 +5,12 @@
  */
 package dev.willram.ramrpg.api.entities
 
+import dev.willram.ramcore.loot.LootTable
 import dev.willram.ramrpg.api.identity.EntityProfileKey
-import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.StatKey
 import dev.willram.ramrpg.api.identity.XpSourceKey
 import org.bukkit.entity.LivingEntity
-
-/** Single weighted drop. */
-data class LootEntry(
-    val item: ItemKey,
-    val weight: Double = 1.0,
-    val minCount: Int = 1,
-    val maxCount: Int = 1,
-    /** Chance in [0,1] this entry rolls independently. */
-    val chance: Double = 1.0,
-)
 
 data class EntityProfile(
     val key: EntityProfileKey,
@@ -28,11 +18,13 @@ data class EntityProfile(
     val xpSourceKey: XpSourceKey? = null,
     val xpAmount: Double = 0.0,
     val skill: SkillKey? = null,
-    /** Independent-chance drops (each rolls separately). */
-    val loot: List<LootEntry> = emptyList(),
-    /** Weighted pool drops (pick lootRolls entries by weight). */
-    val lootPool: List<LootEntry> = emptyList(),
-    val lootRolls: Int = 1,
+    /**
+     * Drops for this mob as a RamCore LootTable, resolved by LootGenerator on death. Null = no custom
+     * drops. Built with [dev.willram.ramrpg.core.loot.RpgLootTables]. (Phase-1 rule-7 waiver: this
+     * replaced the old loot/lootPool/lootRolls fields with no deprecation cycle. WP-1.5a moves this to
+     * a ContentId reference into a loot-table content registry.)
+     */
+    val lootTable: LootTable? = null,
     val isBoss: Boolean = false,
     /** Optional display name override; defaults to profile key value. */
     val displayName: String? = null,

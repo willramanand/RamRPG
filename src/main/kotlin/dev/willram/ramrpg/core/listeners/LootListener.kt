@@ -1,69 +1,45 @@
-/** Rolls EntityProfile.loot on death and drops items. */
+/** Generates EntityProfile.lootTable on death (RamCore LootGenerator) and drops the rolled items. */
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.loot.LootGenerator
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
-import dev.willram.ramrpg.api.entities.LootEntry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
-import dev.willram.ramrpg.api.items.ItemInstanceInit
 import dev.willram.ramrpg.api.items.ItemInstanceService
+import dev.willram.ramrpg.core.loot.RpgItemPayload
+import dev.willram.ramrpg.core.loot.RpgLootContexts
 import org.bukkit.event.entity.EntityDeathEvent
-import kotlin.random.Random
+import java.util.Random
 
 class LootListener(
     private val profiles: EntityProfileRegistry,
     private val items: ItemInstanceService,
     private val defs: ItemDefinitionRegistry,
 ) {
+    private val generator = LootGenerator()
+    private val random = Random()
+
     fun register() {
         Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val profile = profiles.resolve(e.entity) ?: return@handler
-            if (profile.loot.isEmpty()) return@handler
-            val drops = roll(profile.loot) + rollPool(profile.lootPool, profile.lootRolls)
+            val table = profile.lootTable ?: return@handler
+            val context = RpgLootContexts.forKill(e.entity, e.entity.killer)
+            val result = generator.generate(table, context, random)
+            // Each RPG reward payload carries a resolved rollSeed; nothing rolled means no drop.
+            val drops = result.rewards().mapNotNull { r ->
+                (r.payload() as? RpgItemPayload)?.let { it to r.amount() }
+            }
             if (drops.isEmpty()) return@handler
             val loc = e.entity.location
             Schedulers.run(loc) {
-                for ((key, count) in drops) {
-                    val def = defs.get(key) ?: continue
-                    val stack = items.create(def, ItemInstanceInit())
-                    stack.amount = count.coerceIn(1, 64)
+                for ((payload, amount) in drops) {
+                    val def = defs.get(payload.item) ?: continue
+                    val stack = items.create(def, payload.init)
+                    stack.amount = amount.coerceIn(1, 64)
                     loc.world.dropItemNaturally(loc, stack)
                 }
             }
         }
-    }
-
-    private fun roll(loot: List<LootEntry>): List<Pair<dev.willram.ramrpg.api.identity.ItemKey, Int>> {
-        val rolled = ArrayList<Pair<dev.willram.ramrpg.api.identity.ItemKey, Int>>()
-        for (entry in loot) {
-            if (Random.nextDouble() >= entry.chance) continue
-            val count = if (entry.minCount >= entry.maxCount) entry.minCount
-            else Random.nextInt(entry.minCount, entry.maxCount + 1)
-            rolled += entry.item to count
-        }
-        return rolled
-    }
-
-    private fun rollPool(pool: List<LootEntry>, rolls: Int): List<Pair<dev.willram.ramrpg.api.identity.ItemKey, Int>> {
-        if (pool.isEmpty() || rolls <= 0) return emptyList()
-        val totalWeight = pool.sumOf { it.weight }
-        if (totalWeight <= 0.0) return emptyList()
-        val out = ArrayList<Pair<dev.willram.ramrpg.api.identity.ItemKey, Int>>(rolls)
-        repeat(rolls) {
-            var roll = Random.nextDouble() * totalWeight
-            for (entry in pool) {
-                roll -= entry.weight
-                if (roll <= 0.0) {
-                    if (Random.nextDouble() < entry.chance) {
-                        val count = if (entry.minCount >= entry.maxCount) entry.minCount
-                        else Random.nextInt(entry.minCount, entry.maxCount + 1)
-                        out += entry.item to count
-                    }
-                    break
-                }
-            }
-        }
-        return out
     }
 }

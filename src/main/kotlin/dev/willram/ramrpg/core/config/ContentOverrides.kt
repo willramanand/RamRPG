@@ -65,17 +65,6 @@ class EntityOverride : DataItem() {
     var xpAmount: Double? = null
     var skill: String? = null
     var xpSource: String? = null
-    /** Weighted loot pool; ItemKey id strings → (weight, chance, min, max). */
-    var lootPool: List<LootOverrideEntry> = emptyList()
-    var lootRolls: Int? = null
-}
-
-class LootOverrideEntry {
-    var item: String = ""
-    var weight: Double = 1.0
-    var chance: Double = 1.0
-    var min: Int = 1
-    var max: Int = 1
 }
 
 class EnchantOverride : DataItem() {
@@ -204,26 +193,15 @@ class ContentOverrideLoader(private val baseDir: Path) {
             val current = entities.get(EntityProfileKey(cid)) ?: continue
             val newStats = if (ov.baseStats.isEmpty()) current.baseStats
             else ov.baseStats.mapKeys { (k, _) -> StatKey(ContentId.parse(k)) }
-            val newPool = if (ov.lootPool.isEmpty()) current.lootPool
-            else ov.lootPool.mapNotNull { entry ->
-                val itemCid = parseId(entry.item) ?: return@mapNotNull null
-                dev.willram.ramrpg.api.entities.LootEntry(
-                    item = dev.willram.ramrpg.api.identity.ItemKey(itemCid),
-                    weight = entry.weight,
-                    chance = entry.chance,
-                    minCount = entry.min,
-                    maxCount = entry.max,
-                )
-            }
             entities.register(OWNER, EntityProfile(
                 key = current.key,
                 baseStats = newStats,
                 xpSourceKey = ov.xpSource?.let { XpSourceKey(ContentId.parse(it)) } ?: current.xpSourceKey,
                 xpAmount = ov.xpAmount ?: current.xpAmount,
                 skill = ov.skill?.let { SkillKey(ContentId.parse(it)) } ?: current.skill,
-                loot = current.loot,
-                lootPool = newPool,
-                lootRolls = ov.lootRolls ?: current.lootRolls,
+                // Loot overriding via this JSON shim was dropped in WP-1.1a (loot is now a LootTable);
+                // loot tables become editable content in WP-1.5a. The profile keeps its builtin table.
+                lootTable = current.lootTable,
                 isBoss = current.isBoss,
                 displayName = current.displayName,
             ))

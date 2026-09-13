@@ -1,14 +1,16 @@
 /** Default 27 vanilla mob profiles + 4 tier overlays each. */
 package dev.willram.ramrpg.builtin.entities
 
+import dev.willram.ramcore.content.ContentId
+import dev.willram.ramcore.loot.LootTable
 import dev.willram.ramrpg.api.entities.EntityProfile
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
-import dev.willram.ramrpg.api.entities.LootEntry
 import dev.willram.ramrpg.api.identity.EntityProfileKey
 import dev.willram.ramrpg.api.identity.ItemKey
 import dev.willram.ramrpg.api.identity.XpSourceKey
 import dev.willram.ramrpg.builtin.identity.RamSkills
 import dev.willram.ramrpg.builtin.identity.RamStats
+import dev.willram.ramrpg.core.loot.RpgLootTables
 
 private fun pk(v: String) = EntityProfileKey.of("ramrpg", v)
 private fun xk(v: String) = XpSourceKey.of("ramrpg", v)
@@ -51,41 +53,43 @@ private val TIERS = listOf(
 
 private fun ik(v: String) = ItemKey.of("ramrpg", v)
 
-/** Loot per tier. Base mobs drop nothing custom; elites/legendaries roll rare drops. */
-private fun lootForTier(tier: String?, mob: String): List<LootEntry> = when (tier) {
-    null -> emptyList()
-    "uncommon" -> listOf(LootEntry(ik("ember_charm"), chance = 0.05))
-    "rare" -> listOf(LootEntry(ik("ember_charm"), chance = 0.20))
-    "epic" -> listOf(
-        LootEntry(ik("ember_charm"), chance = 0.50),
-        LootEntry(ik("rogue_blade"), chance = 0.05),
-    )
-    "legendary" -> listOf(
-        LootEntry(ik("rogue_blade"), chance = 0.15),
-        LootEntry(ik("warden_husk_chest"), chance = 0.05),
-    )
+/** Independent-chance drops per tier. Base mobs drop nothing custom; elites/legendaries roll rares. */
+private fun independentForTier(tier: String?): List<Pair<ItemKey, Double>> = when (tier) {
+    "uncommon" -> listOf(ik("ember_charm") to 0.05)
+    "rare" -> listOf(ik("ember_charm") to 0.20)
+    "epic" -> listOf(ik("ember_charm") to 0.50, ik("rogue_blade") to 0.05)
+    "legendary" -> listOf(ik("rogue_blade") to 0.15, ik("warden_husk_chest") to 0.05)
     else -> emptyList()
 }
 
-private fun bossLoot(mob: String): List<LootEntry> = when (mob) {
-    "warden" -> listOf(LootEntry(ik("warden_husk_chest"), chance = 0.50), LootEntry(ik("dragon_fang"), chance = 0.05))
-    "ender_dragon" -> listOf(LootEntry(ik("dragon_fang"), chance = 0.80))
-    "wither" -> listOf(LootEntry(ik("dragon_fang"), chance = 0.40), LootEntry(ik("warden_husk_chest"), chance = 0.30))
+private fun bossIndependent(mob: String): List<Pair<ItemKey, Double>> = when (mob) {
+    "warden" -> listOf(ik("warden_husk_chest") to 0.50, ik("dragon_fang") to 0.05)
+    "ender_dragon" -> listOf(ik("dragon_fang") to 0.80)
+    "wither" -> listOf(ik("dragon_fang") to 0.40, ik("warden_husk_chest") to 0.30)
     else -> emptyList()
 }
 
 private val COMMON_POOL = listOf(
-    LootEntry(ik("ember_charm"), weight = 60.0),
-    LootEntry(ik("rogue_blade"), weight = 25.0),
-    LootEntry(ik("warden_husk_chest"), weight = 10.0),
-    LootEntry(ik("dragon_fang"), weight = 5.0),
+    RpgLootTables.PoolItem(ik("ember_charm"), 60.0),
+    RpgLootTables.PoolItem(ik("rogue_blade"), 25.0),
+    RpgLootTables.PoolItem(ik("warden_husk_chest"), 10.0),
+    RpgLootTables.PoolItem(ik("dragon_fang"), 5.0),
 )
 
-private fun poolFor(tier: String?, mob: String): Pair<List<LootEntry>, Int> = when {
+private fun poolFor(tier: String?, mob: String): Pair<List<RpgLootTables.PoolItem>, Int> = when {
     mob in setOf("warden", "ender_dragon", "wither", "elder_guardian") -> COMMON_POOL to 3
     tier == "legendary" -> COMMON_POOL to 2
     tier == "epic" -> COMMON_POOL to 1
-    else -> emptyList<LootEntry>() to 0
+    else -> emptyList<RpgLootTables.PoolItem>() to 0
+}
+
+/** Builds a LootTable from independent-chance drops plus a weighted pool, or null when there is none. */
+private fun buildTable(id: String, independent: List<Pair<ItemKey, Double>>, pool: List<RpgLootTables.PoolItem>, rolls: Int): LootTable? {
+    if (independent.isEmpty() && (pool.isEmpty() || rolls <= 0)) return null
+    val b = RpgLootTables.builder(ContentId.of("ramrpg", "loot/$id"))
+    for ((item, chance) in independent) b.independent(item, chance)
+    b.weightedPool(rolls, pool)
+    return b.build()
 }
 
 object BuiltinEntities {
@@ -104,9 +108,7 @@ object BuiltinEntities {
                 xpSourceKey = xk("kill_${s.id}"),
                 xpAmount = s.xp,
                 skill = RamSkills.COMBAT,
-                loot = bossLoot(s.id),
-                lootPool = bossPool,
-                lootRolls = bossRolls,
+                lootTable = buildTable(s.id, bossIndependent(s.id), bossPool, bossRolls),
                 isBoss = boss,
             ))
             for ((tier, mult) in TIERS) {
@@ -121,9 +123,7 @@ object BuiltinEntities {
                     xpSourceKey = xk("kill_${tier}_${s.id}"),
                     xpAmount = s.xp * mult * 2.0,
                     skill = RamSkills.COMBAT,
-                    loot = lootForTier(tier, s.id),
-                    lootPool = pool,
-                    lootRolls = rolls,
+                    lootTable = buildTable("${tier}_${s.id}", independentForTier(tier), pool, rolls),
                 ))
             }
         }
