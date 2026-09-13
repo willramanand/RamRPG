@@ -2,7 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
-import dev.willram.ramcore.scheduler.Schedulers
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.builtin.identity.RamStats
 import dev.willram.ramrpg.core.platform.Cancellable
@@ -18,12 +18,12 @@ class ManaRegen(
     private val stats: StatService,
     private val store: PlayerStore,
     private val platform: PlatformScheduler,
-) {
+) : AutoCloseable {
     private val tasks = ConcurrentHashMap<UUID, Cancellable>()
 
-    fun register() {
-        Events.subscribe(PlayerJoinEvent::class.java).handler { e -> start(e.player) }
-        Events.subscribe(PlayerQuitEvent::class.java).handler { e -> stop(e.player.uniqueId) }
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(PlayerJoinEvent::class.java).handler { e -> start(e.player) })
+        consumer.bind(Events.subscribe(PlayerQuitEvent::class.java).handler { e -> stop(e.player.uniqueId) })
     }
 
     private fun start(player: Player) {
@@ -50,7 +50,8 @@ class ManaRegen(
         tasks.remove(id)?.cancel()
     }
 
-    fun shutdown() {
+    /** Bound in enable(); RamCore closes it on disable, cancelling every per-player regen task. */
+    override fun close() {
         for (t in tasks.values) t.cancel()
         tasks.clear()
     }

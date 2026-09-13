@@ -11,6 +11,7 @@ import dev.willram.ramcore.packet.PacketVisualTransport
 import dev.willram.ramcore.packet.PacketViewer
 import dev.willram.ramcore.packet.Packets
 import dev.willram.ramcore.protocol.Protocol
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.items.ItemInstanceService
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -55,8 +56,8 @@ class PacketRenderListener(
     private val entityItemVisuals: EntityItemVisualRenderer? = null,
 ) {
 
-    fun register() {
-        Protocol.subscribe(
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Protocol.subscribe(
             PacketType.Play.Server.WINDOW_ITEMS,
             PacketType.Play.Server.SET_SLOT,
             PacketType.Play.Server.ENTITY_METADATA,
@@ -74,8 +75,8 @@ class PacketRenderListener(
             } catch (_: Throwable) {
                 // best-effort: leave packet untouched on render failure
             }
-        }
-        if (instances != null) registerCreativeCanonicalizer()
+        })
+        if (instances != null) registerCreativeCanonicalizer(consumer)
     }
 
     private fun renderMerchantRecipes(packet: PacketContainer, viewer: Player) {
@@ -104,8 +105,8 @@ class PacketRenderListener(
         }
     }
 
-    private fun registerCreativeCanonicalizer() {
-        Protocol.subscribe(PacketType.Play.Client.SET_CREATIVE_SLOT).handler { ev ->
+    private fun registerCreativeCanonicalizer(consumer: TerminableConsumer) {
+        consumer.bind(Protocol.subscribe(PacketType.Play.Client.SET_CREATIVE_SLOT).handler { ev ->
             try {
                 val mod = ev.packet.itemModifier
                 if (mod.size() == 0) return@handler
@@ -119,7 +120,7 @@ class PacketRenderListener(
             } catch (_: Throwable) {
                 // best-effort: leave inbound packet untouched on failure
             }
-        }
+        })
     }
 
     private fun renderEntityMetadata(packet: PacketContainer, viewer: Player) {

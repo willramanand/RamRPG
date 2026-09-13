@@ -5,6 +5,7 @@ import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.pdc.PDCs
 import dev.willram.ramcore.pdc.PdcKey
 import dev.willram.ramcore.scheduler.Schedulers
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.builtin.identity.RamStats
 import net.kyori.adventure.text.Component
@@ -20,8 +21,8 @@ object EntityProfilePdc {
 }
 
 class EntitySpawnListener(private val profiles: EntityProfileRegistry) {
-    fun register() {
-        Events.subscribe(EntitySpawnEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(EntitySpawnEvent::class.java).handler { e ->
             val living = e.entity as? LivingEntity ?: return@handler
             val profile = profiles.resolve(living) ?: return@handler
             val hp = profile.baseStats[RamStats.HEALTH]
@@ -48,6 +49,6 @@ class EntitySpawnListener(private val profiles: EntityProfileRegistry) {
                     living.isCustomNameVisible = true
                 }
             }
-        }
+        })
     }
 }

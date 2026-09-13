@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.combat.DamageContext
 import dev.willram.ramrpg.api.combat.DamagePipeline
 import org.bukkit.entity.LivingEntity
@@ -11,8 +12,8 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 
 class CombatListener(private val pipeline: DamagePipeline) {
-    fun register() {
-        Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.HIGH)
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.HIGH)
             .filter { !it.isCancelled }
             .filter { it.entity is LivingEntity }
             .handler { e ->
@@ -37,6 +38,6 @@ class CombatListener(private val pipeline: DamagePipeline) {
                     if (sec.cancelled) continue
                     victim.damage(sec.finalDamage, sec.attacker)
                 }
-            }
+            })
     }
 }

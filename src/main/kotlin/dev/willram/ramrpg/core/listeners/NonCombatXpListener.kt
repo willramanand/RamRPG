@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.identity.XpSourceKey
 import dev.willram.ramrpg.api.skills.SkillService
@@ -21,36 +22,36 @@ import org.bukkit.event.player.PlayerFishEvent
 
 class NonCombatXpListener(private val skillService: SkillService) {
 
-    fun register() {
-        Events.subscribe(BlockPlaceEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(BlockPlaceEvent::class.java).handler { e ->
             BlockUtils.setPlayerPlaced(e.block)
-        }
-        Events.subscribe(BlockBreakEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(BlockBreakEvent::class.java).handler { e ->
             if (BlockUtils.isPlayerPlaced(e.block)) return@handler
             val (skill, xp) = classifyBlock(e.block.type) ?: return@handler
             fire(e.player, skill, "block_${e.block.type.name.lowercase()}", xp)
-        }
-        Events.subscribe(PlayerFishEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(PlayerFishEvent::class.java).handler { e ->
             if (e.state != PlayerFishEvent.State.CAUGHT_FISH) return@handler
             fire(e.player, RamSkills.FISHING, "fish_caught", 5.0)
-        }
-        Events.subscribe(EnchantItemEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EnchantItemEvent::class.java).handler { e ->
             fire(e.enchanter, RamSkills.ENCHANTING, "enchant_apply", e.expLevelCost.toDouble())
-        }
-        Events.subscribe(EntityBreedEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EntityBreedEvent::class.java).handler { e ->
             val p = e.breeder as? org.bukkit.entity.Player ?: return@handler
             fire(p, RamSkills.FARMING, "entity_breed", 4.0)
-        }
-        Events.subscribe(EntityDamageEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EntityDamageEvent::class.java).handler { e ->
             val p = e.entity as? org.bukkit.entity.Player ?: return@handler
             if (e.finalDamage <= 0.0) return@handler
             fire(p, RamSkills.DEFENSE, "damage_taken", e.finalDamage * 0.5)
-        }
-        Events.subscribe(PlayerJumpEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(PlayerJumpEvent::class.java).handler { e ->
             fire(e.player, RamSkills.AGILITY, "jump", 0.2)
-        }
+        })
         // sprint distance: every ~16 blocks sprinted grants 1 xp
-        Events.subscribe(org.bukkit.event.player.PlayerMoveEvent::class.java).handler { e ->
+        consumer.bind(Events.subscribe(org.bukkit.event.player.PlayerMoveEvent::class.java).handler { e ->
             if (!e.player.isSprinting) return@handler
             val from = e.from
             val to = e.to
@@ -63,7 +64,7 @@ class NonCombatXpListener(private val skillService: SkillService) {
                 sprintAcc[e.player.uniqueId] = 0.0
                 fire(e.player, RamSkills.AGILITY, "sprint", 1.0)
             }
-        }
+        })
     }
 
     private val sprintAcc = java.util.concurrent.ConcurrentHashMap<java.util.UUID, Double>()

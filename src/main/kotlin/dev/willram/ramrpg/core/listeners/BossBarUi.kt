@@ -3,6 +3,7 @@ package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.content.ContentId
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.identity.SkillKey
 import dev.willram.ramrpg.api.skills.SkillRegistry
 import dev.willram.ramrpg.api.skills.SkillService
@@ -22,31 +23,32 @@ class BossBarUi(
     private val skills: SkillService,
     private val registry: SkillRegistry,
     private val store: PlayerStore,
-) {
+) : AutoCloseable {
     private val bars = ConcurrentHashMap<UUID, BossBar>()
     private val activeSkill = ConcurrentHashMap<UUID, SkillKey>()
 
-    fun register() {
-        Events.subscribe(PlayerJoinEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(PlayerJoinEvent::class.java).handler { e ->
             store.get(e.player.uniqueId)?.lastActiveSkillId
                 ?.let { runCatching { SkillKey(ContentId.parse(it)) }.getOrNull() }
                 ?.let { update(e.player, it) }
-        }
-        Events.subscribe(PlayerQuitEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(PlayerQuitEvent::class.java).handler { e ->
             bars.remove(e.player.uniqueId)?.let { e.player.hideBossBar(it) }
             activeSkill.remove(e.player.uniqueId)
-        }
-        Events.subscribe(EntityDeathEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val killer = e.entity.killer ?: return@handler
             update(killer, RamSkills.COMBAT)
-        }
+        })
     }
 
     fun onXpGain(player: Player, skill: SkillKey, @Suppress("UNUSED_PARAMETER") amount: Double) {
         update(player, skill)
     }
 
-    fun shutdown() {
+    /** Bound to the UiModule; RamCore closes it on disable, hiding every active boss bar. */
+    override fun close() {
         for ((id, bar) in bars) {
             org.bukkit.Bukkit.getPlayer(id)?.hideBossBar(bar)
         }

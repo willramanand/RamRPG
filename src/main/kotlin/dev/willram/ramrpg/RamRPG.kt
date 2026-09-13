@@ -4,24 +4,10 @@ import dev.willram.ramcore.RamPlugin
 import dev.willram.ramcore.data.DataKeyCodec
 import dev.willram.ramcore.playerdata.PlayerDataOptions
 import dev.willram.ramcore.playerdata.PlayerDataService
-import dev.willram.ramcore.reward.RewardActionFactories
 import dev.willram.ramcore.store.StoreCodec
 import dev.willram.ramcore.store.StoreMigrations
 import dev.willram.ramcore.store.Stores
-import dev.willram.ramrpg.api.abilities.AbilityRegistry
-import dev.willram.ramrpg.api.abilities.AbilityService
-import dev.willram.ramrpg.api.combat.DamagePipeline
-import dev.willram.ramrpg.api.combat.DamagePriority
-import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
-import dev.willram.ramrpg.api.entities.EntityProfileRegistry
-import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
-import dev.willram.ramrpg.api.items.ItemInstanceService
-import dev.willram.ramrpg.api.reforges.ReforgeRegistry
-import dev.willram.ramrpg.api.skills.SkillRegistry
-import dev.willram.ramrpg.api.skills.SkillService
-import dev.willram.ramrpg.api.sockets.GemRegistry
 import dev.willram.ramrpg.api.stats.StatDirtyReason
-import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.builtin.abilities.BuiltinAbilities
 import dev.willram.ramrpg.builtin.enchants.BuiltinEnchants
 import dev.willram.ramrpg.builtin.entities.BuiltinEntities
@@ -29,44 +15,26 @@ import dev.willram.ramrpg.builtin.items.BuiltinItems
 import dev.willram.ramrpg.builtin.reforges.BuiltinReforges
 import dev.willram.ramrpg.builtin.skills.BuiltinSkills
 import dev.willram.ramrpg.builtin.sockets.BuiltinGems
-import dev.willram.ramrpg.builtin.stats.ApplyStage
-import dev.willram.ramrpg.builtin.stats.ArmorMitigationStage
 import dev.willram.ramrpg.builtin.stats.BuiltinStats
-import dev.willram.ramrpg.builtin.stats.CritRollStage
-import dev.willram.ramrpg.builtin.stats.DamageIndicatorStage
-import dev.willram.ramrpg.builtin.stats.EnchantDamageStage
-import dev.willram.ramrpg.builtin.stats.EnchantPostHitStage
-import dev.willram.ramrpg.builtin.stats.FerocityStage
-import dev.willram.ramrpg.builtin.stats.LifestealStage
-import dev.willram.ramrpg.builtin.stats.StrengthStage
-import dev.willram.ramrpg.builtin.stats.TrueDefenseStage
-import dev.willram.ramrpg.builtin.stats.WeaponBaseStage
 import dev.willram.ramrpg.core.config.ContentOverrideLoader
 import dev.willram.ramrpg.core.config.Translations
 import dev.willram.ramrpg.core.listeners.AbilityListener
-import dev.willram.ramrpg.core.listeners.ActionBarUi
-import dev.willram.ramrpg.core.listeners.BossBarUi
-import dev.willram.ramrpg.core.listeners.CombatListener
-import dev.willram.ramrpg.core.listeners.EconomyService
+import dev.willram.ramrpg.core.listeners.DurabilityListener
 import dev.willram.ramrpg.core.listeners.EnchantingListener
 import dev.willram.ramrpg.core.listeners.EntitySpawnListener
 import dev.willram.ramrpg.core.listeners.EquipmentListener
 import dev.willram.ramrpg.core.listeners.FortuneListener
-import dev.willram.ramrpg.core.listeners.LootListener
+import dev.willram.ramrpg.core.listeners.InventoryRefreshListener
 import dev.willram.ramrpg.core.listeners.ManaRegen
 import dev.willram.ramrpg.core.listeners.MythicIntegration
 import dev.willram.ramrpg.core.listeners.NonCombatXpListener
 import dev.willram.ramrpg.core.listeners.SkillsCommand
 import dev.willram.ramrpg.core.listeners.XpListener
-import dev.willram.ramrpg.core.platform.PlatformScheduler
+import dev.willram.ramrpg.core.listeners.applyPlayerAttributes
+import dev.willram.ramrpg.core.modules.RpgModules
 import dev.willram.ramrpg.core.platform.RamCorePlatformScheduler
-import dev.willram.ramrpg.core.rendering.PacketItemRenderer
 import dev.willram.ramrpg.core.rendering.PacketItemRendererImpl
 import dev.willram.ramrpg.core.rendering.PacketRenderListener
-import dev.willram.ramrpg.core.rewards.BuffRewardFactory
-import dev.willram.ramrpg.core.rewards.PerkPointRewardFactory
-import dev.willram.ramrpg.core.rewards.RpgItemRewardFactory
-import dev.willram.ramrpg.core.rewards.SkillXpRewardFactory
 import dev.willram.ramrpg.core.services.AbilityRegistryImpl
 import dev.willram.ramrpg.core.services.AbilityServiceImpl
 import dev.willram.ramrpg.core.services.DamagePipelineImpl
@@ -87,7 +55,6 @@ import dev.willram.ramrpg.core.services.SocketStatProvider
 import dev.willram.ramrpg.core.services.StatServiceImpl
 import dev.willram.ramrpg.core.storage.FilePlayerStore
 import dev.willram.ramrpg.core.storage.PlayerRpgData
-import dev.willram.ramrpg.core.storage.PlayerStore
 import io.papermc.paper.command.brigadier.Commands
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -96,46 +63,30 @@ import org.bukkit.Sound
 import java.io.File
 import java.time.Duration
 
+/**
+ * WP-1.7b: RamRPG owns no subsystem `lateinit` fields any more. Every subsystem service is
+ * constructed and registered under [RpgServiceKeys] in [load]; every subsystem listener/registration
+ * is either migrated into its own [dev.willram.ramrpg.core.modules] `TerminableModule` (bound in
+ * [enable]) or, for the always-on core listeners that have no later WP, registered in [enable] against
+ * this plugin's terminable consumer. Collaborators are resolved from the service registry, never from
+ * a singleton. Anything with lifecycle is bound via `bind`/`bindModule`, so there is no manual
+ * `shutdown()` in [disable].
+ */
 class RamRPG : RamPlugin() {
 
-    lateinit var platform: PlatformScheduler
-    lateinit var playerStore: PlayerStore
-    lateinit var stats: StatService
-    lateinit var skillRegistry: SkillRegistry
-    lateinit var skillService: SkillService
-    lateinit var itemDefs: ItemDefinitionRegistry
-    lateinit var itemInstances: ItemInstanceService
-    lateinit var enchantments: EnchantmentRegistry
-    lateinit var entityProfiles: EntityProfileRegistry
-    lateinit var abilities: AbilityRegistry
-    lateinit var abilityService: AbilityService
-    lateinit var damagePipeline: DamagePipeline
-    lateinit var renderer: PacketItemRenderer
-    lateinit var reforges: ReforgeRegistry
-    lateinit var gems: GemRegistry
-
+    /** Command handler; created in [enable], registered in [registerCommands] (Paper lifecycle). */
     private var skillsCommand: SkillsCommand? = null
-    private lateinit var bossBarUi: BossBarUi
-    private lateinit var actionBarUi: ActionBarUi
-    private lateinit var manaRegen: ManaRegen
-    private lateinit var equipmentListener: EquipmentListener
-    lateinit var economy: EconomyService
-
-    /**
-     * RamCore's reward-action registry: `money`/`command`/`message`/`permission-node-check` from
-     * [RewardActionFactories.standard], plus the RPG-specific types WP-1.2b adds (`skill_xp`,
-     * `rpg_item`, and the `buff`/`perk_point` stubs). Nothing consumes this yet -- QuestService still
-     * carries its own [dev.willram.ramrpg.api.quests.QuestReward] model -- so later WPs can build on
-     * top of a real, populated registry instead of an empty one. WP-1.7b will move this registration
-     * into a RewardModule.
-     */
-    lateinit var rewardFactories: RewardActionFactories
-    lateinit var questRegistry: dev.willram.ramrpg.api.quests.QuestRegistry
-    lateinit var quests: dev.willram.ramrpg.core.services.QuestService
     var mythicMobsEnabled: Boolean = false
 
     companion object {
         private lateinit var i: RamRPG
+
+        @Deprecated(
+            "RamRPG.get() is a transitional shim kept for one release. Resolve services from the " +
+                "RamCore ServiceRegistry (services().require(RpgServiceKeys.X)) or receive them via " +
+                "constructor injection instead.",
+            ReplaceWith("services().require(dev.willram.ramrpg.core.services.RpgServiceKeys.X)"),
+        )
         fun get(): RamRPG = i
     }
 
@@ -160,65 +111,81 @@ class RamRPG : RamPlugin() {
             ),
         )
         playerData.register(FilePlayerStore.RPG_KEY, store)
-        playerStore = FilePlayerStore(playerData)
+        val playerStore = FilePlayerStore(playerData)
 
         // WP-1.7a: the RPG subsystem services are constructed here -- not in enable() -- because
         // RamCore's SimpleServiceRegistry (services().register(...)) refuses registration once
         // loadAll() has run, and RamPlugin#onLoad calls loadAll() immediately after this method
-        // returns. Construction itself is unchanged (same classes, same arguments, same order); only
-        // the timing moved from onEnable to onLoad. None of these constructors touch the Bukkit
-        // runtime or other plugins' enabled state (mythicMobsEnabled/MythicIntegration only check
-        // plugin *presence*, which is already known at load time, same as above).
-        //
-        // Content registration (registerBuiltins/applyContentOverrides), stat providers, damage
-        // stages, and listener registration all still happen in enable(), where they belong: Bukkit
-        // forbids registering listeners before a plugin is enabled.
-        platform = RamCorePlatformScheduler()
-        stats = StatServiceImpl()
-        skillRegistry = SkillRegistryImpl()
-        skillService = SkillServiceImpl(
+        // returns. None of these constructors touch the Bukkit runtime. Construction order is the
+        // topological order recorded in RpgServiceGraph: a service is built after the services its
+        // constructor needs (playerStore before skillService, itemDefs before itemInstances/renderer,
+        // etc.). Listener registration, content, stat providers and damage stages happen in enable().
+        val platform = RamCorePlatformScheduler()
+        val stats = StatServiceImpl()
+        val skillRegistry = SkillRegistryImpl()
+        val skillService = SkillServiceImpl(
             skillRegistry, playerStore,
-            onLevelUp = ::onSkillLevelUp,
-            onXpGain = { p, k, amt ->
-                if (::bossBarUi.isInitialized) bossBarUi.onXpGain(p, k, amt)
-                if (::quests.isInitialized) quests.onSkillXp(p, k, amt.toInt())
-            },
+            onLevelUp = { p, k, lvl -> handleLevelUp(p, k, lvl) },
+            // XP-gain reactions (boss bar, quest progress) are registered by UiModule / QuestModule via
+            // SkillServiceImpl.addXpGainListener, so the plugin holds no reference to those objects.
         )
+        val itemDefs = ItemDefinitionRegistryImpl()
+        val itemInstances = ItemInstanceServiceImpl(itemDefs)
+        val enchantments = EnchantmentRegistryImpl()
 
-        val itemDefsImpl = ItemDefinitionRegistryImpl()
-        itemDefs = itemDefsImpl
-        itemInstances = ItemInstanceServiceImpl(itemDefsImpl)
-        enchantments = EnchantmentRegistryImpl()
+        val entityProfiles = EntityProfileRegistryImpl()
+        entityProfiles.mythicResolver = MythicIntegration.resolver()
 
-        val entityProfilesImpl = EntityProfileRegistryImpl()
-        entityProfilesImpl.mythicResolver = MythicIntegration.resolver()
-        entityProfiles = entityProfilesImpl
+        val abilities = AbilityRegistryImpl()
+        val abilityService = AbilityServiceImpl(
+            abilities, playerStore, skillService, dev.willram.ramrpg.builtin.identity.RamSkills.SORCERY,
+        )
+        val damagePipeline = DamagePipelineImpl()
+        val reforges = ReforgeRegistryImpl()
+        val gems = GemRegistryImpl()
+        val renderer = PacketItemRendererImpl(itemDefs, itemInstances, stats, enchantments, reforges, gems)
 
-        abilities = AbilityRegistryImpl()
-        abilityService = AbilityServiceImpl(abilities, playerStore, skillService, dev.willram.ramrpg.builtin.identity.RamSkills.SORCERY)
-        damagePipeline = DamagePipelineImpl()
-        reforges = ReforgeRegistryImpl()
-        gems = GemRegistryImpl()
-        renderer = PacketItemRendererImpl(itemDefs, itemInstances, stats, enchantments, reforges, gems)
-
-        // economy is Vault-free at construction time (its Vault-backed properties are `by lazy` and
-        // stay unevaluated until first use in enable()/later); questRegistry and quests are pure
-        // in-memory/file wiring, same as the player-data store above.
-        economy = EconomyService()
-        questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
+        // economy is Vault-free at construction time (its Vault-backed properties are `by lazy`);
+        // questRegistry and quests are pure in-memory/file wiring, same as the player-data store above.
+        val economy = dev.willram.ramrpg.core.listeners.EconomyService()
+        val questRegistry = dev.willram.ramrpg.core.services.QuestRegistryImpl()
         val questDir = File(dataFolder, "quests")
         if (!questDir.exists()) questDir.mkdirs()
-        quests = dev.willram.ramrpg.core.services.QuestService(questRegistry, skillService, economy, playerStore, questDir.toPath())
+        val quests = dev.willram.ramrpg.core.services.QuestService(
+            questRegistry, skillService, economy, playerStore, questDir.toPath(),
+        )
 
-        registerServices()
+        registerServices(
+            platform, playerStore, stats, skillRegistry, skillService, itemDefs, itemInstances,
+            enchantments, entityProfiles, abilities, abilityService, damagePipeline, renderer,
+            reforges, gems, economy, questRegistry, quests,
+        )
     }
 
     /**
      * Registers every RPG subsystem service under its [RpgServiceKeys] key. Must run from [load]
      * (see the comment there) -- RamCore's registry rejects `register(...)` once `loadAll()` has run.
-     * `rewardFactories` is intentionally excluded; see [RpgServiceKeys]'s class doc.
      */
-    private fun registerServices() {
+    private fun registerServices(
+        platform: dev.willram.ramrpg.core.platform.PlatformScheduler,
+        playerStore: dev.willram.ramrpg.core.storage.PlayerStore,
+        stats: dev.willram.ramrpg.api.stats.StatService,
+        skillRegistry: dev.willram.ramrpg.api.skills.SkillRegistry,
+        skillService: dev.willram.ramrpg.api.skills.SkillService,
+        itemDefs: dev.willram.ramrpg.api.items.ItemDefinitionRegistry,
+        itemInstances: dev.willram.ramrpg.api.items.ItemInstanceService,
+        enchantments: dev.willram.ramrpg.api.enchants.EnchantmentRegistry,
+        entityProfiles: dev.willram.ramrpg.api.entities.EntityProfileRegistry,
+        abilities: dev.willram.ramrpg.api.abilities.AbilityRegistry,
+        abilityService: dev.willram.ramrpg.api.abilities.AbilityService,
+        damagePipeline: dev.willram.ramrpg.api.combat.DamagePipeline,
+        renderer: dev.willram.ramrpg.core.rendering.PacketItemRenderer,
+        reforges: dev.willram.ramrpg.api.reforges.ReforgeRegistry,
+        gems: dev.willram.ramrpg.api.sockets.GemRegistry,
+        economy: dev.willram.ramrpg.core.listeners.EconomyService,
+        questRegistry: dev.willram.ramrpg.api.quests.QuestRegistry,
+        quests: dev.willram.ramrpg.core.services.QuestService,
+    ) {
         val registry = services()
         registry.register(RpgServiceKeys.PLATFORM, platform)
         registry.register(RpgServiceKeys.PLAYER_STORE, playerStore)
@@ -243,24 +210,58 @@ class RamRPG : RamPlugin() {
     override fun enable() {
         Translations.load(this)
 
+        // Content, providers and damage stages: foundational registration into the (already-enabled)
+        // services. Damage stages live in CombatModule; the rest are core bootstrap here.
         registerBuiltins()
         applyContentOverrides()
         registerStatProviders()
-        registerDamageStages()
-        registerListeners()
 
-        skillsCommand = SkillsCommand(skillRegistry, skillService, stats, enchantments, itemInstances, itemDefs, reforges, gems, playerStore, abilities, abilityService)
+        // Always-on core listeners with no dedicated subsystem module. Registered against this plugin
+        // (a TerminableConsumer), so every subscription -- and ManaRegen's per-player tasks -- is bound
+        // and torn down by RamCore on disable. Later WPs modify these listener classes, never this file.
+        EquipmentListener(service(RpgServiceKeys.STATS)).register(this)
+        XpListener(service(RpgServiceKeys.ENTITY_PROFILES), service(RpgServiceKeys.SKILL_SERVICE), service(RpgServiceKeys.ECONOMY)).register(this)
+        val manaRegen = bind(ManaRegen(service(RpgServiceKeys.STATS), service(RpgServiceKeys.PLAYER_STORE), service(RpgServiceKeys.PLATFORM)))
+        manaRegen.register(this)
+        PacketRenderListener(service(RpgServiceKeys.RENDERER), service(RpgServiceKeys.ITEM_INSTANCES)).register(this)
+        AbilityListener(service(RpgServiceKeys.ABILITY_SERVICE)).register(this)
+        EntitySpawnListener(service(RpgServiceKeys.ENTITY_PROFILES)).register(this)
+        FortuneListener(service(RpgServiceKeys.STATS)).register(this)
+        NonCombatXpListener(service(RpgServiceKeys.SKILL_SERVICE)).register(this)
+        EnchantingListener(service(RpgServiceKeys.ENCHANTMENTS), service(RpgServiceKeys.ITEM_INSTANCES), service(RpgServiceKeys.ITEM_DEFINITIONS)).register(this)
+        DurabilityListener().register(this)
+        InventoryRefreshListener(service(RpgServiceKeys.PLATFORM)).register(this)
+
+        skillsCommand = SkillsCommand(
+            service(RpgServiceKeys.SKILL_REGISTRY),
+            service(RpgServiceKeys.SKILL_SERVICE),
+            service(RpgServiceKeys.STATS),
+            service(RpgServiceKeys.ENCHANTMENTS),
+            service(RpgServiceKeys.ITEM_INSTANCES),
+            service(RpgServiceKeys.ITEM_DEFINITIONS),
+            service(RpgServiceKeys.REFORGES),
+            service(RpgServiceKeys.GEMS),
+            service(RpgServiceKeys.PLAYER_STORE),
+            service(RpgServiceKeys.ABILITIES),
+            service(RpgServiceKeys.ABILITY_SERVICE),
+            service(RpgServiceKeys.QUESTS),
+            service(RpgServiceKeys.QUEST_REGISTRY),
+            reloadContent = ::reloadContent,
+        )
+
+        // Per-subsystem module seams (WP-1.7b): each resolves its collaborators from the service
+        // registry and binds its listeners/tasks to RamCore. Six are populated; ten are seeded empty
+        // for one named later WP each. See RpgModules.
+        for (module in RpgModules.all(this)) bindModule(module)
 
         runCatching { dev.willram.ramrpg.core.config.RamRpgMetrics.register(this) }
         log("<yellow>RamRPG <green>enabled <gray>(rewrite scaffold)")
     }
 
     override fun disable() {
-        if (::manaRegen.isInitialized) manaRegen.shutdown()
-        if (::actionBarUi.isInitialized) actionBarUi.shutdown()
-        if (::bossBarUi.isInitialized) bossBarUi.shutdown()
-        // PlayerDataService is bound to this plugin's lifecycle (installed in load()); it flushes every
-        // online player's data inline on disable, so there is no store to save or close here.
+        // Nothing to tear down by hand: every listener, task and UI holder is bound via
+        // bind/bindModule and closed by RamCore's terminable registry in LIFO order, and
+        // PlayerDataService (installed in load()) flushes every online player's data on disable.
     }
 
     @Suppress("UnstableApiUsage")
@@ -268,7 +269,18 @@ class RamRPG : RamPlugin() {
         skillsCommand?.register(commands)
     }
 
-    fun reloadContent() {
+    /**
+     * Re-applies HOCON content overrides at runtime (the `/skills reload` admin command). Resolves the
+     * registries from the service registry rather than fields. A later WP (RpgCommand / ContentModule)
+     * grows a fuller reload; this stays the minimal `/skills reload` path.
+     */
+    private fun reloadContent() {
+        val stats = service(RpgServiceKeys.STATS)
+        val itemDefs = service(RpgServiceKeys.ITEM_DEFINITIONS)
+        val skillRegistry = service(RpgServiceKeys.SKILL_REGISTRY)
+        val entityProfiles = service(RpgServiceKeys.ENTITY_PROFILES)
+        val enchantments = service(RpgServiceKeys.ENCHANTMENTS)
+        val renderer = service(RpgServiceKeys.RENDERER)
         itemDefs.unregisterOwner("ramrpg-override")
         skillRegistry.unregisterOwner("ramrpg-override")
         entityProfiles.unregisterOwner("ramrpg-override")
@@ -276,30 +288,44 @@ class RamRPG : RamPlugin() {
         applyContentOverrides()
         renderer.invalidate()
         for (p in server.onlinePlayers) {
-            stats.markDirty(p, dev.willram.ramrpg.api.stats.StatDirtyReason.WORLD_CHANGED)
+            stats.markDirty(p, StatDirtyReason.WORLD_CHANGED)
         }
     }
 
     private fun registerBuiltins() {
-        BuiltinStats.registerAll(stats)
-        BuiltinSkills.registerAll(skillRegistry)
-        BuiltinItems.registerAll(itemDefs)
-        BuiltinEnchants.registerAll(enchantments)
-        BuiltinEntities.registerAll(entityProfiles)
-        BuiltinAbilities.registerAll(abilities, skillService)
-        BuiltinReforges.registerAll(reforges)
-        BuiltinGems.registerAll(gems)
+        BuiltinStats.registerAll(service(RpgServiceKeys.STATS))
+        BuiltinSkills.registerAll(service(RpgServiceKeys.SKILL_REGISTRY))
+        BuiltinItems.registerAll(service(RpgServiceKeys.ITEM_DEFINITIONS))
+        BuiltinEnchants.registerAll(service(RpgServiceKeys.ENCHANTMENTS))
+        BuiltinEntities.registerAll(service(RpgServiceKeys.ENTITY_PROFILES))
+        BuiltinAbilities.registerAll(service(RpgServiceKeys.ABILITIES), service(RpgServiceKeys.SKILL_SERVICE))
+        BuiltinReforges.registerAll(service(RpgServiceKeys.REFORGES))
+        BuiltinGems.registerAll(service(RpgServiceKeys.GEMS))
     }
 
     private fun applyContentOverrides() {
         val contentDir = File(dataFolder, "content")
         if (!contentDir.exists()) contentDir.mkdirs()
         ContentOverrideLoader(contentDir.toPath())
-            .apply(stats, itemDefs, skillRegistry, entityProfiles, enchantments)
+            .apply(
+                service(RpgServiceKeys.STATS),
+                service(RpgServiceKeys.ITEM_DEFINITIONS),
+                service(RpgServiceKeys.SKILL_REGISTRY),
+                service(RpgServiceKeys.ENTITY_PROFILES),
+                service(RpgServiceKeys.ENCHANTMENTS),
+            )
     }
 
     private fun registerStatProviders() {
         val owner = "ramrpg-builtin"
+        val stats = service(RpgServiceKeys.STATS)
+        val skillRegistry = service(RpgServiceKeys.SKILL_REGISTRY)
+        val skillService = service(RpgServiceKeys.SKILL_SERVICE)
+        val itemInstances = service(RpgServiceKeys.ITEM_INSTANCES)
+        val itemDefs = service(RpgServiceKeys.ITEM_DEFINITIONS)
+        val enchantments = service(RpgServiceKeys.ENCHANTMENTS)
+        val reforges = service(RpgServiceKeys.REFORGES)
+        val gems = service(RpgServiceKeys.GEMS)
         stats.registerProvider(SkillStatProvider(skillRegistry, skillService), owner)
         stats.registerProvider(EquipmentStatProvider(itemInstances, itemDefs), owner)
         stats.registerProvider(EnchantmentStatProvider(itemInstances, enchantments), owner)
@@ -307,52 +333,9 @@ class RamRPG : RamPlugin() {
         stats.registerProvider(SocketStatProvider(itemInstances, gems), owner)
     }
 
-    private fun registerDamageStages() {
-        damagePipeline.register(WeaponBaseStage(stats))
-        damagePipeline.register(StrengthStage(stats))
-        damagePipeline.register(EnchantDamageStage(itemInstances, enchantments, DamagePriority.ENCHANT_OFFENSE, true))
-        damagePipeline.register(CritRollStage(stats))
-        damagePipeline.register(ArmorMitigationStage(stats))
-        damagePipeline.register(TrueDefenseStage(stats))
-        damagePipeline.register(EnchantDamageStage(itemInstances, enchantments, DamagePriority.ENCHANT_DEFENSE, false))
-        damagePipeline.register(LifestealStage(stats))
-        damagePipeline.register(EnchantPostHitStage(itemInstances, enchantments))
-        damagePipeline.register(FerocityStage(stats))
-        damagePipeline.register(DamageIndicatorStage())
-        damagePipeline.register(ApplyStage())
-    }
-
-    private fun registerListeners() {
-        equipmentListener = EquipmentListener(stats).also { it.register() }
-        CombatListener(damagePipeline).register()
-        // economy/questRegistry/quests are constructed (and registered under RpgServiceKeys) in
-        // load() -- see the comment there. rewardFactories stays here: it must evaluate
-        // economy.ramCoreEconomy (a lazy Vault probe) after Vault has had a chance to enable, which
-        // load() runs too early for.
-        rewardFactories = RewardActionFactories.standard(economy.ramCoreEconomy)
-            .register(SkillXpRewardFactory(skillService, platform))
-            .register(RpgItemRewardFactory(itemDefs, itemInstances, platform))
-            .register(BuffRewardFactory())
-            .register(PerkPointRewardFactory())
-        dev.willram.ramrpg.builtin.quests.BuiltinQuests.registerAll(questRegistry)
-        quests.registerObjectives()
-        XpListener(entityProfiles, skillService, economy).register()
-        dev.willram.ramrpg.core.listeners.QuestProgressListener(quests, entityProfiles).register()
-        manaRegen = ManaRegen(stats, playerStore, platform).also { it.register() }
-        PacketRenderListener(renderer, itemInstances).register()
-        AbilityListener(abilityService).register()
-        actionBarUi = ActionBarUi(stats, playerStore, platform).also { it.register() }
-        bossBarUi = BossBarUi(skillService, skillRegistry, playerStore).also { it.register() }
-        EntitySpawnListener(entityProfiles).register()
-        FortuneListener(stats).register()
-        NonCombatXpListener(skillService).register()
-        LootListener(entityProfiles, itemInstances, itemDefs).register()
-        EnchantingListener(enchantments, itemInstances, itemDefs).register()
-        dev.willram.ramrpg.core.listeners.DurabilityListener().register()
-        dev.willram.ramrpg.core.listeners.InventoryRefreshListener(platform).register()
-    }
-
-    private fun onSkillLevelUp(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {
+    private fun handleLevelUp(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {
+        val skillRegistry = service(RpgServiceKeys.SKILL_REGISTRY)
+        val stats = service(RpgServiceKeys.STATS)
         val def = skillRegistry.get(key)
         val name = def?.displayName ?: Component.text(key.id.value())
         val title = Title.title(
@@ -372,13 +355,13 @@ class RamRPG : RamPlugin() {
         ).color(NamedTextColor.GOLD))
         p.playSound(p.location, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f)
         stats.markDirty(p, StatDirtyReason.SKILL_LEVEL_CHANGED)
-        if (::equipmentListener.isInitialized) equipmentListener.applyAttributes(p)
+        applyPlayerAttributes(stats, p)
         // Milestones every 10 levels
         if (lvl > 0 && lvl % 10 == 0) onMilestone(p, key, lvl)
     }
 
     private fun onMilestone(p: org.bukkit.entity.Player, key: dev.willram.ramrpg.api.identity.SkillKey, lvl: Int) {
-        val def = skillRegistry.get(key) ?: return
+        val def = service(RpgServiceKeys.SKILL_REGISTRY).get(key) ?: return
         val reward = lvl * 100.0
         p.sendMessage(Component.translatable(
             "ramrpg.skill.milestone",
@@ -387,14 +370,11 @@ class RamRPG : RamPlugin() {
         ).color(NamedTextColor.LIGHT_PURPLE))
         p.playSound(p.location, Sound.ENTITY_FIREWORK_ROCKET_BLAST, 1f, 1f)
         p.world.spawnParticle(org.bukkit.Particle.HAPPY_VILLAGER, p.location.add(0.0, 1.5, 0.0), 30, 0.5, 0.5, 0.5)
-        if (::economy.isInitialized && economy.enabled) {
+        val economy = service(RpgServiceKeys.ECONOMY)
+        if (economy.enabled) {
             if (economy.deposit(p, reward)) {
                 p.sendMessage(Component.text("+$reward coins", NamedTextColor.GREEN))
             }
         }
-    }
-
-    fun refreshAttributes(p: org.bukkit.entity.Player) {
-        if (::equipmentListener.isInitialized) equipmentListener.applyAttributes(p)
     }
 }
