@@ -7,9 +7,14 @@ import dev.willram.ramrpg.api.combat.DamagePriority
 import dev.willram.ramrpg.api.combat.DamageStage
 import dev.willram.ramrpg.api.combat.DamageTag
 import dev.willram.ramrpg.api.identity.StatKey
+import dev.willram.ramrpg.api.items.ItemInstanceData
+import dev.willram.ramrpg.api.items.ItemInstanceService
 import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.builtin.identity.RamStats
+import dev.willram.ramrpg.core.services.DurabilityService
+import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import kotlin.random.Random
 
 private fun id(v: String) = ContentId.of("ramrpg", v)
@@ -120,4 +125,74 @@ class ApplyStage : DamageStage {
     override val key = id("apply")
     override val priority = DamagePriority.APPLY
     override fun apply(ctx: DamageContext) { /* writes back into event in CombatListener */ }
+}
+
+/**
+ * WP-2.2: drains RPG durability at [DamagePriority.APPLY] (2000) -- after every offense/defense stage has
+ * settled `ctx.finalDamage`, so the drain reflects "a hit landed", not merely an attempt (the pipeline
+ * already stops running stages once `ctx.cancelled`, so a cancelled attack never reaches this stage; see
+ * `DamagePipelineImpl.runStages`). Drains the attacker's held weapon by [DurabilityService.DRAIN_PER_HIT]
+ * and, when the victim is a [Player], each worn armor piece by [DurabilityService.DRAIN_PER_ARMOR_HIT] --
+ * both directions run through the same pure [DurabilityService.damage]. See
+ * `docs/design/2.2-durability.md` for the rates and why armor is included.
+ *
+ * Inert-at-zero is NOT decided here -- [dev.willram.ramrpg.api.items.ItemDefinition.inertReason] (WP-2.1c)
+ * reads `ItemInstanceData.durability` directly, so once [DurabilityService.damage] clamps a stack to 0 the
+ * very next stats recalculation treats it as inert. This stage's only job is making that number reach 0
+ * (and telling the owner about it) -- it never re-implements or redefines what "inert" means.
+ *
+ * Folia-safety: like [LifestealStage] (which mutates `p.health` directly with no scheduler hop) this stage
+ * writes back to the attacker's/victim's live inventory/equipment inline -- `DamagePipeline.process`
+ * already runs synchronously inside `CombatListener`'s `EntityDamageByEntityEvent` handler, which Folia
+ * already dispatches on the entity's own region thread, so there is nothing extra to schedule.
+ */
+class DurabilityDrainStage(
+    private val items: ItemInstanceService,
+    private val durability: DurabilityService,
+) : DamageStage {
+    override val key = id("durability_drain")
+    override val priority = DamagePriority.APPLY
+
+    override fun apply(ctx: DamageContext) {
+        val attacker = ctx.attacker as? Player
+        if (attacker != null) {
+            drainAndWrite(attacker.inventory.itemInMainHand, DurabilityService.DRAIN_PER_HIT, attacker) {
+                attacker.inventory.setItemInMainHand(it)
+            }
+        }
+        val victim = ctx.victim as? Player ?: return
+        val eq = victim.equipment
+        drainAndWrite(eq.helmet, DurabilityService.DRAIN_PER_ARMOR_HIT, victim) { eq.setHelmet(it) }
+        drainAndWrite(eq.chestplate, DurabilityService.DRAIN_PER_ARMOR_HIT, victim) { eq.setChestplate(it) }
+        drainAndWrite(eq.leggings, DurabilityService.DRAIN_PER_ARMOR_HIT, victim) { eq.setLeggings(it) }
+        drainAndWrite(eq.boots, DurabilityService.DRAIN_PER_ARMOR_HIT, victim) { eq.setBoots(it) }
+    }
+
+    private fun drainAndWrite(stack: ItemStack?, amount: Int, owner: Player, write: (ItemStack) -> Unit) {
+        if (stack == null || stack.type.isAir) return
+        val data = items.identify(stack) ?: return
+        if (data.durability <= 0) return // already inert; damage() would no-op anyway -- nothing to notify again
+        val updated = durability.damage(data, amount)
+        if (updated.durability == data.durability) return
+        write(items.write(stack, updated))
+        notify(owner, stack, data.durability, updated)
+    }
+
+    /** [ramrpg.item.broken] once, exactly on the hit that reaches 0; a one-time [ramrpg.item.durability_warning] on the hit that crosses [DurabilityService.WARNING_THRESHOLD_FRACTION] -- never repeated while it stays below. */
+    private fun notify(owner: Player, stack: ItemStack, before: Int, updated: ItemInstanceData) {
+        val max = updated.maxDurability
+        if (max <= 0) return
+        val name = stack.itemMeta?.let { if (it.hasDisplayName()) it.displayName() else null }
+            ?: Component.text(stack.type.name)
+        if (updated.durability <= 0) {
+            owner.sendMessage(Component.translatable("ramrpg.item.broken", name))
+            return
+        }
+        val warnAt = max * DurabilityService.WARNING_THRESHOLD_FRACTION
+        if (before > warnAt && updated.durability <= warnAt) {
+            owner.sendMessage(Component.translatable(
+                "ramrpg.item.durability_warning", name, Component.text(updated.durability), Component.text(max)
+            ))
+        }
+    }
 }
