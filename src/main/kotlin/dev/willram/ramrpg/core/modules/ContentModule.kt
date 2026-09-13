@@ -19,6 +19,12 @@ import dev.willram.ramcore.terminable.module.TerminableModule
 import dev.willram.ramrpg.core.config.ContentRegistrarRpg
 import dev.willram.ramrpg.core.config.RpgContentLoadResult
 import dev.willram.ramrpg.core.config.RpgContentLoader
+import dev.willram.ramrpg.core.config.specs.EffectSpec
+import dev.willram.ramrpg.core.effects.BlockMatcherRegistry
+import dev.willram.ramrpg.core.effects.BuiltinEffectActions
+import dev.willram.ramrpg.core.effects.EffectActionRegistry
+import dev.willram.ramrpg.core.effects.EffectConditionRegistry
+import dev.willram.ramrpg.core.effects.TriggeredEffectDispatcher
 import dev.willram.ramrpg.core.services.RpgServiceKeys
 import java.io.File
 
@@ -26,6 +32,21 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
 
     override fun setup(consumer: TerminableConsumer) {
         val platform = ctx.service(RpgServiceKeys.PLATFORM)
+
+        // WP-1.5b: the three effect registries, populated with the builtin ids (data, not `when`s), then
+        // wired to the effect parser. Built here so both the loader (which resolves item/enchant effect
+        // bundles) and the dispatcher share one set of registrations.
+        val actions = EffectActionRegistry()
+        val conditions = EffectConditionRegistry()
+        val matchers = BlockMatcherRegistry()
+        BuiltinEffectActions.registerAll(actions, conditions, matchers, platform)
+        val effectRegistries = EffectSpec.Registries(actions, conditions, matchers)
+
+        // WP-1.5b: the TriggeredEffect dispatcher. It owns Bukkit event subscriptions + a repeating tick
+        // task, so it MUST bind through this module's TerminableConsumer (RamCore tears them down on
+        // disable) and never through RamRPG.kt (B5). It starts empty; later WPs register holder effects.
+        TriggeredEffectDispatcher(platform).bind(consumer)
+
         val registrar = ContentRegistrarRpg(
             stats = ctx.service(RpgServiceKeys.STATS),
             items = ctx.service(RpgServiceKeys.ITEM_DEFINITIONS),
@@ -53,7 +74,7 @@ class ContentModule(private val ctx: ServiceContext) : TerminableModule {
         // Load off the main thread (blocking file I/O), then apply registrations on the global thread
         // where the RPG registries expect their mutations.
         platform.runAsync {
-            val result: RpgContentLoadResult = RpgContentLoader.load(contentDir.toPath())
+            val result: RpgContentLoadResult = RpgContentLoader.load(contentDir.toPath(), effectRegistries)
             platform.runGlobal {
                 val errors = result.errors() + registrar.registerAll(result, OWNER)
                 if (errors.isEmpty()) {
