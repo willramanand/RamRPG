@@ -3,8 +3,8 @@
  * [CombatListener] bridge (EntityDamageByEntityEvent -> DamagePipeline). Collaborators are resolved
  * from the [ServiceContext] the modules were registered into in `load()`, never from a singleton.
  *
- * Later work packages register their own damage stages here (WP-2.3a: Resistances / elemental
- * breakdown; WP-6.4a: boss combat) -- in this module, never in `RamRPG.kt`.
+ * Later work packages register their own damage stages here (WP-2.3a: elemental breakdown /
+ * resistances -- done below; WP-6.4a: boss combat) -- in this module, never in `RamRPG.kt`.
  */
 package dev.willram.ramrpg.core.modules
 
@@ -16,10 +16,12 @@ import dev.willram.ramrpg.builtin.stats.ApplyStage
 import dev.willram.ramrpg.builtin.stats.ArmorMitigationStage
 import dev.willram.ramrpg.builtin.stats.CritRollStage
 import dev.willram.ramrpg.builtin.stats.DamageIndicatorStage
+import dev.willram.ramrpg.builtin.stats.ElementalBreakdownStage
 import dev.willram.ramrpg.builtin.stats.EnchantDamageStage
 import dev.willram.ramrpg.builtin.stats.EnchantPostHitStage
 import dev.willram.ramrpg.builtin.stats.FerocityStage
 import dev.willram.ramrpg.builtin.stats.LifestealStage
+import dev.willram.ramrpg.builtin.stats.ResistancesStage
 import dev.willram.ramrpg.builtin.stats.StrengthStage
 import dev.willram.ramrpg.builtin.stats.TrueDefenseStage
 import dev.willram.ramrpg.builtin.stats.WeaponBaseStage
@@ -38,6 +40,8 @@ class CombatModule(private val ctx: ServiceContext) : TerminableModule {
         pipeline.register(StrengthStage(stats))
         pipeline.register(EnchantDamageStage(itemInstances, enchantments, DamagePriority.ENCHANT_OFFENSE, true))
         pipeline.register(CritRollStage(stats))
+        pipeline.register(ElementalBreakdownStage())
+        pipeline.register(ResistancesStage(stats))
         pipeline.register(ArmorMitigationStage(stats))
         pipeline.register(TrueDefenseStage(stats))
         pipeline.register(EnchantDamageStage(itemInstances, enchantments, DamagePriority.ENCHANT_DEFENSE, false))

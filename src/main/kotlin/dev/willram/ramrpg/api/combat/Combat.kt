@@ -50,6 +50,8 @@ object DamagePriority {
     const val CRIT_ROLL = 500
     const val ELEMENTAL_BREAKDOWN = 600
     const val ABILITY_MOD = 700
+    /** WP-2.3a: per-type resistance reduction, just before flat armor mitigation. */
+    const val RESISTANCES = 1000
     const val ARMOR_MITIGATION = 1100
     const val TRUE_DEFENSE = 1200
     const val ENCHANT_DEFENSE = 1300
