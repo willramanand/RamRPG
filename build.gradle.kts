@@ -50,7 +50,8 @@ repositories {
 dependencies {
     // Provided by the server or by RamCore at runtime (declared in paper-plugin.yml). Never shaded.
     compileOnly("io.papermc.paper:paper-api:$paperVersion")
-    compileOnly("dev.willram:RamCore:2.0.0")
+    compileOnly("dev.willram:ramcore-api:2.0.0")
+    compileOnly("dev.willram:ramcore-protocol:2.0.0")
     compileOnly("com.comphenix.protocol:ProtocolLib:5.3.0-SNAPSHOT")
     compileOnly("com.github.MilkBowl:VaultAPI:1.7")
     compileOnly("io.lumine:Mythic-Dist:5.6.1")
@@ -59,9 +60,12 @@ dependencies {
     implementation("org.bstats:bstats-bukkit:3.0.2")
 
     // compileOnly is not on the test classpath in Gradle; the existing tests import paper-api and
-    // RamCore types (ContentId, etc.), so both must be added back for the test compilation.
+    // RamCore types, so they must be added back for the test compilation. ramcore-test declares
+    // api(ramcore-api), so it puts the whole ramcore-api on the test classpath transitively;
+    // ramcore-protocol carries the dev.willram.ramcore.packet package the render tests use.
     testImplementation("io.papermc.paper:paper-api:$paperVersion")
-    testImplementation("dev.willram:RamCore:2.0.0")
+    testImplementation("dev.willram:ramcore-protocol:2.0.0")
+    testImplementation("dev.willram:ramcore-test:2.0.0")
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     // Gradle 9 no longer puts the JUnit Platform launcher on the test runtime classpath automatically.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
