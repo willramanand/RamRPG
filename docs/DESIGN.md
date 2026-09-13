@@ -34,6 +34,10 @@ damage pipeline, and the dataVersion ledger.
 - [Lore rendering — surfacing requirement/quality/durability/set lore per-viewer](design/lore-rendering.md)
 - [2.3a — Damage types, split rules and resistance formula](design/2.3a-damage-types.md)
 
+## Phase 3
+
+- [3.0 — Command surface and the /skills deprecation map](design/3.0-command-surface.md)
+
 ## Phase 5
 
 - [5.3 — Set bonus thresholds and shipped sets](design/5.3-armor-sets.md)

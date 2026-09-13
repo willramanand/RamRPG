@@ -29,7 +29,7 @@ dependencies:
       join-classpath: true
 permissions:
   ramrpg.admin:
-    description: Allows use of RamRPG admin skill commands (/skills reload, reset, give).
+    description: Allows use of the RamRPG /rpg admin subtree (give, level, xp, enchant, reset).
     default: op
   ramrpg.command.admin:
     description: Umbrella permission granting all RamRPG /rpg admin commands.
