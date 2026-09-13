@@ -281,7 +281,7 @@ class SkillsCommand(
     private fun questsCommand(ctx: CommandContext<CommandSourceStack>): Int {
         val p = ctx.source.sender as? Player ?: return 0
         val rpg = dev.willram.ramrpg.RamRPG.get()
-        QuestsGui(p, rpg.questRegistry, rpg.quests).open()
+        QuestsGui.open(p, rpg.questRegistry, rpg.quests)
         return Command.SINGLE_SUCCESS
     }
 
