@@ -48,6 +48,8 @@
   "ramrpg.quest.complete": "Quest complete: {0}",
   "ramrpg.quest.gui.empty": "No quests available",
   "ramrpg.quest.gui.title": "Quests",
+  "ramrpg.reforge.applied": "Reforged to {0}",
+  "ramrpg.reforge.cost": "Reforge cost: {0} XP levels",
   "ramrpg.rpg.perks.stub": "Perks are not available yet",
   "ramrpg.rpg.reforge.stub": "Reforging now happens at a smithing station",
   "ramrpg.rpg.reload.applied": "Reload applied: {0} added, {1} changed, {2} removed, {3} broken reference(s)",

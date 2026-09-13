@@ -6,6 +6,12 @@ import dev.willram.ramrpg.api.items.ReforgeKey
 import dev.willram.ramrpg.api.reforges.ReforgeDefinition
 import dev.willram.ramrpg.api.reforges.ReforgeRegistry
 
+/**
+ * Owner-scoped [ReforgeRegistry] over RamCore's [ContentRegistry]. Unchanged behaviour; WP-3.3c note:
+ * [all] is the source of the reforge POOL a reforge recipe draws from -- a `type = reforge` recipe names
+ * one of these keys, and [dev.willram.ramrpg.core.crafting.ReforgeOutcomes.pool] orders them for a seeded
+ * random-reforge selection. See `docs/design/3.3c-reforge-costs.md`.
+ */
 class ReforgeRegistryImpl(
     private val backing: ContentRegistry<ReforgeDefinition> = ContentRegistry.create(ReforgeDefinition::class.java)
 ) : ReforgeRegistry {
