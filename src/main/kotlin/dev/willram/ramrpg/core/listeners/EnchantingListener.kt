@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.enchants.EnchantingContext
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.enchants.RPGEnchantment
@@ -22,10 +23,10 @@ class EnchantingListener(
     private val items: ItemInstanceService,
     private val defs: ItemDefinitionRegistry,
 ) {
-    fun register() {
-        Events.subscribe(PrepareItemEnchantEvent::class.java).handler(::onPrepare)
-        Events.subscribe(EnchantItemEvent::class.java).handler(::onEnchant)
-        Events.subscribe(PrepareAnvilEvent::class.java).handler(::onAnvil)
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(PrepareItemEnchantEvent::class.java).handler(::onPrepare))
+        consumer.bind(Events.subscribe(EnchantItemEvent::class.java).handler(::onEnchant))
+        consumer.bind(Events.subscribe(PrepareAnvilEvent::class.java).handler(::onAnvil))
     }
 
     private fun onPrepare(e: PrepareItemEnchantEvent) {

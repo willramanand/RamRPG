@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.abilities.AbilityTrigger
 import dev.willram.ramrpg.api.effects.BlockMatchers
@@ -15,8 +16,8 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.entity.Player
 
 class AbilityListener(private val abilities: AbilityService) {
-    fun register() {
-        Events.subscribe(PlayerInteractEvent::class.java, EventPriority.HIGH).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(PlayerInteractEvent::class.java, EventPriority.HIGH).handler { e ->
             val p = e.player
             val item = e.item
             val trigger: AbilityTrigger = when (e.action) {
@@ -26,16 +27,16 @@ class AbilityListener(private val abilities: AbilityService) {
                 else -> return@handler
             }
             abilities.tryFire(trigger, BlockAwareAbilityContext(player = p, item = item))
-        }
-        Events.subscribe(BlockBreakEvent::class.java, EventPriority.HIGH).handler { e ->
+        })
+        consumer.bind(Events.subscribe(BlockBreakEvent::class.java, EventPriority.HIGH).handler { e ->
             val ctx = BlockAwareAbilityContext(
                 player = e.player,
                 item = e.player.inventory.itemInMainHand,
                 block = e.block,
             )
             abilities.tryFire(AbilityTrigger.BlockBreak(BlockMatchers.ANY), ctx)
-        }
-        Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.MONITOR).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EntityDamageByEntityEvent::class.java, EventPriority.MONITOR).handler { e ->
             val attacker = e.damager as? Player ?: return@handler
             val victim = e.entity as? org.bukkit.entity.LivingEntity ?: return@handler
             abilities.tryFire(AbilityTrigger.EntityHit, BlockAwareAbilityContext(
@@ -44,8 +45,8 @@ class AbilityListener(private val abilities: AbilityService) {
                 target = victim,
                 damageVictim = victim,
             ))
-        }
-        Events.subscribe(EntityDeathEvent::class.java).handler { e ->
+        })
+        consumer.bind(Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val killer = e.entity.killer ?: return@handler
             abilities.tryFire(AbilityTrigger.Killed, BlockAwareAbilityContext(
                 player = killer,
@@ -53,6 +54,6 @@ class AbilityListener(private val abilities: AbilityService) {
                 target = e.entity,
                 damageVictim = e.entity,
             ))
-        }
+        })
     }
 }

@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.identity.XpSourceKey
 import dev.willram.ramrpg.api.identity.SkillKey
@@ -17,8 +18,8 @@ class XpListener(
     private val skills: SkillService,
     private val economy: EconomyService? = null,
 ) {
-    fun register() {
-        Events.subscribe(EntityDeathEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val killer: Player = e.entity.killer ?: return@handler
             val victim: LivingEntity = e.entity
             val profile = profiles.resolve(victim) ?: return@handler
@@ -43,6 +44,6 @@ class XpListener(
                         .append(net.kyori.adventure.text.Component.text(name, net.kyori.adventure.text.format.NamedTextColor.LIGHT_PURPLE))
                 )
             }
-        }
+        })
     }
 }

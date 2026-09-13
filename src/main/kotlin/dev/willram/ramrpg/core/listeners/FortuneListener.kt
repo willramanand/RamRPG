@@ -3,6 +3,7 @@ package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.scheduler.Schedulers
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.builtin.identity.RamStats
 import org.bukkit.Material
@@ -32,8 +33,8 @@ private val ORE_DROP_MAP = mapOf(
 )
 
 class FortuneListener(private val stats: StatService) {
-    fun register() {
-        Events.subscribe(BlockBreakEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(BlockBreakEvent::class.java).handler { e ->
             if (!e.isDropItems) return@handler
             val drop = ORE_DROP_MAP[e.block.type] ?: return@handler
             val fortune = stats.snapshot(e.player).get(RamStats.FORTUNE)
@@ -46,6 +47,6 @@ class FortuneListener(private val stats: StatService) {
             val world = e.block.world
             val loc = e.block.location.add(0.5, 0.5, 0.5)
             Schedulers.run(loc) { world.dropItemNaturally(loc, org.bukkit.inventory.ItemStack(drop, bonus)) }
-        }
+        })
     }
 }

@@ -13,6 +13,7 @@ import dev.willram.ramrpg.core.storage.PlayerStore
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 
 class SkillServiceImpl(
     private val registry: SkillRegistry,
@@ -20,6 +21,20 @@ class SkillServiceImpl(
     private val onLevelUp: (Player, SkillKey, Int) -> Unit = { _, _, _ -> },
     private val onXpGain: (Player, SkillKey, Double) -> Unit = { _, _, _ -> },
 ) : SkillService {
+
+    /**
+     * XP-gain reactions registered at enable()-time by subsystem modules (WP-1.7b). This is how the
+     * per-player UI (BossBarUi, from UiModule) and quest progress (QuestModule) observe XP gains
+     * without the plugin holding a reference to those enable-time objects: instead of routing the
+     * reaction through a `RamRPG` field, each owning module calls [addXpGainListener] from its own
+     * module setup. Fired after the constructor [onXpGain] callback, on the player's thread.
+     */
+    private val xpGainListeners = CopyOnWriteArrayList<(Player, SkillKey, Double) -> Unit>()
+
+    /** Registers a reaction fired on every XP gain. See [xpGainListeners]. */
+    fun addXpGainListener(listener: (Player, SkillKey, Double) -> Unit) {
+        xpGainListeners += listener
+    }
 
     override fun addXp(p: Player, src: XpSource, target: LivingEntity?, multiplier: Double) {
         val def = registry.get(src.skill) ?: return
@@ -42,6 +57,7 @@ class SkillServiceImpl(
         data.setLevel(src.skill, lvl)
         data.setXp(src.skill, xp)
         onXpGain(p, src.skill, gained)
+        for (listener in xpGainListeners) listener(p, src.skill, gained)
     }
 
     override fun level(p: Player, skill: SkillKey): Int = store.get(p.uniqueId)?.getLevel(skill) ?: 1

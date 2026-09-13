@@ -23,10 +23,12 @@ import dev.willram.ramrpg.api.skills.XpSource
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.identity.AbilityKey
+import dev.willram.ramrpg.api.quests.QuestRegistry
 import dev.willram.ramrpg.api.sockets.GemKey
 import dev.willram.ramrpg.api.sockets.GemRegistry
 import dev.willram.ramrpg.api.stats.StatDirtyReason
 import dev.willram.ramrpg.api.stats.StatService
+import dev.willram.ramrpg.core.services.QuestService
 import dev.willram.ramrpg.core.storage.PlayerStore
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
@@ -48,6 +50,9 @@ class SkillsCommand(
     private val playerStore: PlayerStore,
     private val abilities: AbilityRegistry,
     private val abilityService: AbilityService,
+    private val quests: QuestService,
+    private val questRegistry: QuestRegistry,
+    private val reloadContent: () -> Unit,
 ) {
 
     fun register(commands: Commands) {
@@ -252,7 +257,7 @@ class SkillsCommand(
 
     private fun reloadCommand(ctx: CommandContext<CommandSourceStack>): Int {
         val sender = ctx.source.sender
-        dev.willram.ramrpg.RamRPG.get().reloadContent()
+        reloadContent()
         sender.sendMessage(Component.text("Content reloaded"))
         return Command.SINGLE_SUCCESS
     }
@@ -272,16 +277,14 @@ class SkillsCommand(
         val raw = StringArgumentType.getString(ctx, "key").lowercase()
         val cid = runCatching { if (raw.contains(':')) ContentId.parse(raw) else ContentId.of("ramrpg", raw) }
             .getOrNull() ?: return fail(p, "Bad quest id")
-        val rpg = dev.willram.ramrpg.RamRPG.get()
-        val changed = rpg.quests.abandon(p, dev.willram.ramrpg.api.quests.QuestKey(cid))
+        val changed = quests.abandon(p, dev.willram.ramrpg.api.quests.QuestKey(cid))
         p.sendMessage(Component.text(if (changed) "Quest abandoned" else "Nothing to abandon"))
         return Command.SINGLE_SUCCESS
     }
 
     private fun questsCommand(ctx: CommandContext<CommandSourceStack>): Int {
         val p = ctx.source.sender as? Player ?: return 0
-        val rpg = dev.willram.ramrpg.RamRPG.get()
-        QuestsGui.open(p, rpg.questRegistry, rpg.quests)
+        QuestsGui.open(p, questRegistry, quests)
         return Command.SINGLE_SUCCESS
     }
 
@@ -410,7 +413,7 @@ class SkillsCommand(
         val key = resolve(skillStr) ?: return fail(p, "Unknown skill")
         skillService.setLevel(p, key, n)
         stats.markDirty(p, StatDirtyReason.SKILL_LEVEL_CHANGED)
-        dev.willram.ramrpg.RamRPG.get().refreshAttributes(p)
+        applyPlayerAttributes(stats, p)
         p.sendMessage(Component.text("Set ${key.id.value()} to $n"))
         return Command.SINGLE_SUCCESS
     }

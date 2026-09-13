@@ -4,6 +4,7 @@ package dev.willram.ramrpg.core.listeners
 import dev.willram.ramcore.event.Events
 import dev.willram.ramcore.loot.LootGenerator
 import dev.willram.ramcore.scheduler.Schedulers
+import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.ItemDefinitionRegistry
 import dev.willram.ramrpg.api.items.ItemInstanceService
@@ -20,8 +21,8 @@ class LootListener(
     private val generator = LootGenerator()
     private val random = Random()
 
-    fun register() {
-        Events.subscribe(EntityDeathEvent::class.java).handler { e ->
+    fun register(consumer: TerminableConsumer) {
+        consumer.bind(Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val profile = profiles.resolve(e.entity) ?: return@handler
             val table = profile.lootTable ?: return@handler
             val context = RpgLootContexts.forKill(e.entity, e.entity.killer)
@@ -40,6 +41,6 @@ class LootListener(
                     loc.world.dropItemNaturally(loc, stack)
                 }
             }
-        }
+        })
     }
 }
