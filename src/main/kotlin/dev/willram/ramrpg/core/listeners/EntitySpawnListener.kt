@@ -8,6 +8,8 @@ import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.terminable.TerminableConsumer
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.builtin.identity.RamStats
+import dev.willram.ramrpg.core.regions.LevelBandService
+import dev.willram.ramrpg.core.services.EntityProfileRegistryImpl
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.attribute.Attribute
@@ -25,9 +27,14 @@ class EntitySpawnListener(private val profiles: EntityProfileRegistry) {
         consumer.bind(Events.subscribe(EntitySpawnEvent::class.java).handler { e ->
             val living = e.entity as? LivingEntity ?: return@handler
             val profile = profiles.resolve(living) ?: return@handler
-            val hp = profile.baseStats[RamStats.HEALTH]
-            val def = profile.baseStats[RamStats.DEFENSE]
-            val dmg = profile.baseStats[RamStats.DAMAGE]
+            // WP-6.2: `profiles.resolve` (above) already resolved-and-cached this entity's level band
+            // (EntityProfileRegistryImpl.resolve); reading it back here is a cache hit (RamCore Metadata
+            // lookup only) -- NOT a second RegionRuleEngine.regionsAt call -- so applying statMultiplier
+            // per spawn stays a one-time cost, never per-tick (rule 4).
+            val band = (profiles as? EntityProfileRegistryImpl)?.levelBandService?.resolveAndCache(living)
+            val hp = profile.baseStats[RamStats.HEALTH]?.let { LevelBandService.scale(it, band) }
+            val def = profile.baseStats[RamStats.DEFENSE]?.let { LevelBandService.scale(it, band) }
+            val dmg = profile.baseStats[RamStats.DAMAGE]?.let { LevelBandService.scale(it, band) }
             Schedulers.run(living) {
                 if (hp != null) {
                     living.getAttribute(Attribute.MAX_HEALTH)?.baseValue = hp

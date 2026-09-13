@@ -36,6 +36,10 @@ damage pipeline, and the dataVersion ledger.
 ## Phase 5
 
 - [5.3 — Set bonus thresholds and shipped sets](design/5.3-armor-sets.md)
+
+## Phase 6
+
+- [6.2 — Level bands, multipliers and the distance fallback curve](design/6.2-level-bands.md)
 - [1.7b — Service graph, module seams and construction order](design/1.7b-service-graph.md)
 
 ## Phase 0 baseline

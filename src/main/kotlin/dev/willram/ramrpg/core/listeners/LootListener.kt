@@ -2,6 +2,7 @@
 package dev.willram.ramrpg.core.listeners
 
 import dev.willram.ramcore.event.Events
+import dev.willram.ramcore.loot.LootContext
 import dev.willram.ramcore.loot.LootGenerator
 import dev.willram.ramcore.scheduler.Schedulers
 import dev.willram.ramcore.terminable.TerminableConsumer
@@ -11,6 +12,7 @@ import dev.willram.ramrpg.api.items.ItemInstanceService
 import dev.willram.ramrpg.core.loot.BossLootService
 import dev.willram.ramrpg.core.loot.RpgItemPayload
 import dev.willram.ramrpg.core.loot.RpgLootContexts
+import dev.willram.ramrpg.core.services.EntityProfileRegistryImpl
 import org.bukkit.event.entity.EntityDeathEvent
 import java.util.Random
 
@@ -26,7 +28,15 @@ class LootListener(
     fun register(consumer: TerminableConsumer) {
         consumer.bind(Events.subscribe(EntityDeathEvent::class.java).handler { e ->
             val profile = profiles.resolve(e.entity) ?: return@handler
-            val table = profile.lootTable ?: return@handler
+            // WP-6.2: `profiles.resolve` (above) already resolved-and-cached the band at spawn; this is
+            // a cache hit (no RegionRuleEngine.regionsAt call) in the common case -- see
+            // EntityProfileRegistryImpl.resolve and LevelBandService.resolveAndCache. A band's
+            // lootTableOverride replaces the mob's own table when present (every shipped band ships
+            // null -- see docs/design/6.2-level-bands.md); tierWeights folds into the generation
+            // context's `luck` below as a forward-looking bias hook (no builtin loot pool reads luck
+            // yet, same "wired, not yet consumed" seam WP-2.3a left for the other five damage types).
+            val band = (profiles as? EntityProfileRegistryImpl)?.levelBandService?.resolveAndCache(e.entity)
+            val table = band?.lootTableOverride ?: profile.lootTable ?: return@handler
 
             // WP-1.1b: additionally register an instanced, per-player-claimable copy for boss kills.
             // This does NOT replace the ground drop below -- no claim UI exists yet (WP-6.4), so
@@ -38,7 +48,13 @@ class LootListener(
                 if (contributors.isNotEmpty()) bossLoot.onBossDeath(e.entity, contributors)
             }
 
-            val context = RpgLootContexts.forKill(e.entity, e.entity.killer)
+            val base = RpgLootContexts.forKill(e.entity, e.entity.killer)
+            val context = if (band != null && band.tierWeights.isNotEmpty()) {
+                LootContext(
+                    base.scope(), base.playerId(), base.groupId(), base.sourceEntityId(),
+                    base.regionId(), base.worldName(), band.tierWeights.values.sum(), base.metadata(),
+                )
+            } else base
             val result = generator.generate(table, context, random)
             // Each RPG reward payload carries a resolved rollSeed; nothing rolled means no drop.
             val drops = result.rewards().mapNotNull { r ->
