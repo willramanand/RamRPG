@@ -34,9 +34,11 @@ import dev.willram.ramrpg.core.config.specs.EnchantSpec
 import dev.willram.ramrpg.core.config.specs.EntityProfileSpec
 import dev.willram.ramrpg.core.config.specs.GemSpec
 import dev.willram.ramrpg.core.config.specs.ItemSpec
+import dev.willram.ramrpg.core.config.specs.RecipeSpec
 import dev.willram.ramrpg.core.config.specs.ReforgeSpec
 import dev.willram.ramrpg.core.config.specs.SetSpec
 import dev.willram.ramrpg.core.config.specs.SkillSpec
+import dev.willram.ramrpg.core.config.specs.StationSpec
 import dev.willram.ramrpg.core.config.specs.StatSpec
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -70,15 +72,22 @@ class RpgContentLoadResult internal constructor(
     /** WP-5.3: parsed `sets/` entries. See [ContentRegistrarRpg] note -- unlike the six types above,
      *  registering these into a live registry is `SetModule`'s job, not `ContentRegistrarRpg`'s. */
     val sets: List<SetSpec> = emptyList(),
+    /** WP-3.1d: parsed `recipes/` entries; the registrar resolves each into a live
+     *  [dev.willram.ramrpg.api.crafting.Recipe] and registers it into the RecipeRegistry. */
+    val recipes: List<RecipeSpec> = emptyList(),
+    /** WP-3.1d: parsed `stations/` entries; the registrar resolves each into a live
+     *  [dev.willram.ramrpg.api.crafting.Station] and registers it into the StationRegistry. */
+    val stations: List<StationSpec> = emptyList(),
     private val errorList: List<ValidationError>,
     private val sources: Map<ContentId, SourceRef> = emptyMap(),
 ) {
     /** Every spec that loaded cleanly, across all types, in a single flat list. */
     fun definitions(): List<RpgContentSpec> =
         ArrayList<RpgContentSpec>(stats.size + items.size + skills.size + enchants.size +
-            entities.size + reforges.size + gems.size + sets.size).apply {
+            entities.size + reforges.size + gems.size + sets.size + recipes.size + stations.size).apply {
             addAll(stats); addAll(items); addAll(skills); addAll(enchants)
             addAll(entities); addAll(reforges); addAll(gems); addAll(sets)
+            addAll(recipes); addAll(stations)
         }
 
     /** Every error, each with a [dev.willram.ramcore.content.SourceRef] (file + path). */
@@ -106,10 +115,15 @@ object RpgContentLoader {
     const val TYPE_GEMS = "gems"
     /** WP-5.3: armor set definitions -- parsed here (mirroring items/enchants), registered by `SetModule`. */
     const val TYPE_SETS = "sets"
+    /** WP-3.1d: crafting recipes -- parsed here, resolved + registered into the RecipeRegistry by [ContentRegistrarRpg]. */
+    const val TYPE_RECIPES = "recipes"
+    /** WP-3.1d: crafting stations -- parsed here, resolved + registered into the StationRegistry by [ContentRegistrarRpg]. */
+    const val TYPE_STATIONS = "stations"
 
     /** The directory names this loader recognises. A directory not in this set is an error. */
     val KNOWN_TYPES: Set<String> = linkedSetOf(
         TYPE_STATS, TYPE_ITEMS, TYPE_SKILLS, TYPE_ENCHANTS, TYPE_ENTITIES, TYPE_REFORGES, TYPE_GEMS, TYPE_SETS,
+        TYPE_RECIPES, TYPE_STATIONS,
     )
 
     /**
@@ -145,6 +159,8 @@ object RpgContentLoader {
             .deserializer(TYPE_REFORGES, ContentDeserializer { ReforgeSpec.deserialize(it) })
             .deserializer(TYPE_GEMS, ContentDeserializer { GemSpec.deserialize(it) })
             .deserializer(TYPE_SETS, ContentDeserializer { SetSpec.deserialize(it, effects) })
+            .deserializer(TYPE_RECIPES, ContentDeserializer { RecipeSpec.deserialize(it) })
+            .deserializer(TYPE_STATIONS, ContentDeserializer { StationSpec.deserialize(it) })
             .deserialize(content)
 
         // 3. RamRPG policy: a parsed definition whose type (directory) we do not recognise is an error
@@ -176,6 +192,8 @@ object RpgContentLoader {
             reforges = specResult.ofType(TYPE_REFORGES, ReforgeSpec::class.java),
             gems = specResult.ofType(TYPE_GEMS, GemSpec::class.java),
             sets = specResult.ofType(TYPE_SETS, SetSpec::class.java),
+            recipes = specResult.ofType(TYPE_RECIPES, RecipeSpec::class.java),
+            stations = specResult.ofType(TYPE_STATIONS, StationSpec::class.java),
             errorList = errors,
             sources = sources,
         )
@@ -199,12 +217,44 @@ object RpgContentLoader {
     private val PACKAGED_CONTENT: List<String> = listOf("items/builtin.conf", "sets/builtin.conf")
 
     /**
-     * WP-1.5d: first-run resource extraction. For every path in [PACKAGED_CONTENT], parses the packaged
-     * HOCON object (via Configurate's own load/save node API -- no hand-rolled parsing) and writes each
-     * top-level child as its own `<dataContentDir>/<type>/<slug>.conf` file, UNLESS that destination
-     * already exists -- so an operator's edited (or deliberately deleted) copy is never clobbered on a
-     * later startup, and only missing/new entries are (re-)written on an upgrade. Returns the paths
-     * actually written, for logging.
+     * WP-3.1d: the crafting content pack -- the shipped material items plus every recipe/station conf.
+     * Kept SEPARATE from [PACKAGED_CONTENT] on purpose: [loadPackaged] (and thus
+     * [dev.willram.ramrpg.builtin.items.BuiltinItems] / [dev.willram.ramrpg.core.modules.SetModule]) reads
+     * [PACKAGED_CONTENT] and registers its `items`/`sets` programmatically, so folding the material items
+     * in there would (a) double-register every id -- `SimpleContentRegistry.register` throws on a
+     * duplicate id even across owners -- and (b) break the parity tests that pin `loadPackaged().items` at
+     * the 65 builtin weapons/armor. Instead [dev.willram.ramrpg.core.modules.ContentModule] extracts THIS
+     * list into the operator's `content/` on first run and loads it through the normal [load] pipeline
+     * exactly once, registering everything under its single content OWNER so `/rpg reload` cleans it up.
+     *
+     * `items/materials.conf` is included because the refine recipes' `new_item` outcomes reference those
+     * ids and the registrar validates that the output [dev.willram.ramrpg.api.items.ItemDefinition] exists
+     * -- they are registered nowhere else. See docs/design/3.1d-crafting-pipeline.md.
+     */
+    private val PACKAGED_CRAFTING_CONTENT: List<String> = listOf(
+        "items/materials.conf",
+        "recipes/materials.conf",
+        "recipes/smithing_upgrade.conf",
+        "recipes/reforge.conf",
+        "recipes/sockets.conf",
+        "stations/smithing.conf",
+    )
+
+    /**
+     * WP-3.1d: the packaged crafting confs [dev.willram.ramrpg.core.modules.ContentModule] extracts into an
+     * operator's `content/` on first run so the shipped recipes/stations both load AND become editable.
+     * Exposed (vs. the private [PACKAGED_CRAFTING_CONTENT]) so the module names one list, not each path.
+     */
+    fun packagedCraftingContent(): List<String> = PACKAGED_CRAFTING_CONTENT
+
+    /**
+     * WP-1.5d: first-run resource extraction. For every path in [paths] (default [PACKAGED_CONTENT]),
+     * parses the packaged HOCON object (via Configurate's own load/save node API -- no hand-rolled
+     * parsing) and writes each top-level child as its own `<dataContentDir>/<type>/<slug>.conf` file,
+     * UNLESS that destination already exists -- so an operator's edited (or deliberately deleted) copy is
+     * never clobbered on a later startup, and only missing/new entries are (re-)written on an upgrade.
+     * Returns the paths actually written, for logging. WP-3.1d passes [PACKAGED_CRAFTING_CONTENT] to seed
+     * the crafting pack.
      *
      * Blocking classpath + file I/O, exactly like [load] -- callers run this off the main thread (see
      * this file's header doc and [dev.willram.ramrpg.core.modules.ContentModule]).
@@ -212,9 +262,10 @@ object RpgContentLoader {
     fun extractPackagedContent(
         dataContentDir: Path,
         classLoader: ClassLoader = RpgContentLoader::class.java.classLoader,
+        paths: List<String> = PACKAGED_CONTENT,
     ): List<Path> {
         val extracted = ArrayList<Path>()
-        for (relative in PACKAGED_CONTENT) {
+        for (relative in paths) {
             val type = relative.substringBefore('/')
             val root = classLoader.getResourceAsStream("content/$relative")?.let { input ->
                 HoconConfigurationLoader.builder()

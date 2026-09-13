@@ -16,7 +16,16 @@
  */
 package dev.willram.ramrpg.core.config
 
+import dev.willram.ramcore.content.ContentId
 import dev.willram.ramcore.exception.ValidationError
+import dev.willram.ramcore.menu.Menus
+import dev.willram.ramrpg.api.crafting.Ingredient
+import dev.willram.ramrpg.api.crafting.Recipe
+import dev.willram.ramrpg.api.crafting.RecipeOutcome
+import dev.willram.ramrpg.api.crafting.RecipeRegistry
+import dev.willram.ramrpg.api.crafting.Station
+import dev.willram.ramrpg.api.crafting.StationRegistry
+import dev.willram.ramrpg.api.effects.BlockMatchers
 import dev.willram.ramrpg.api.enchants.EnchantmentRegistry
 import dev.willram.ramrpg.api.entities.EntityProfileRegistry
 import dev.willram.ramrpg.api.items.EquipSlotDefaults
@@ -31,6 +40,10 @@ import dev.willram.ramrpg.api.stats.SourceType
 import dev.willram.ramrpg.api.stats.StatModifier
 import dev.willram.ramrpg.api.stats.StatService
 import dev.willram.ramrpg.core.config.specs.ItemSpec
+import dev.willram.ramrpg.core.config.specs.RecipeIngredientKind
+import dev.willram.ramrpg.core.config.specs.RecipeIngredientSpec
+import dev.willram.ramrpg.core.config.specs.RecipeSpec
+import dev.willram.ramrpg.core.config.specs.StationSpec
 import org.bukkit.Material
 
 class ContentRegistrarRpg(
@@ -41,12 +54,20 @@ class ContentRegistrarRpg(
     private val entities: EntityProfileRegistry,
     private val reforges: ReforgeRegistry,
     private val gems: GemRegistry,
+    private val recipes: RecipeRegistry,
+    private val stations: StationRegistry,
 ) {
 
     /**
-     * Registers every loaded spec under [owner], returning any registration-time errors (currently
-     * only unknown materials). Note [StatService.registerDefinition] takes no owner, so HOCON stat
-     * definitions cannot be scoped/unregistered by owner -- matching the existing StatService contract.
+     * Registers every loaded spec under [owner], returning any registration-time errors -- unknown
+     * materials (items + station blocks + recipe material ingredients) and unresolvable content
+     * references (a recipe's station / output item / reforge / gem). Every error AGGREGATES and carries
+     * its source (file + path); [registerAll] NEVER throws. Note [StatService.registerDefinition] takes no
+     * owner, so HOCON stat definitions cannot be scoped/unregistered by owner -- matching the existing
+     * StatService contract.
+     *
+     * ORDER MATTERS: stations register before recipes (a recipe validates that its station exists), and
+     * items before recipes (a `new_item`/`transmute` recipe validates that its output item exists).
      */
     fun registerAll(result: RpgContentLoadResult, owner: String): List<ValidationError> {
         val errors = ArrayList<ValidationError>()
@@ -61,20 +82,161 @@ class ContentRegistrarRpg(
         result.items.forEach { spec ->
             val material = runCatching { Material.valueOf(spec.material) }.getOrNull()
             if (material == null) {
-                // Cite the file + path this item came from (the loader kept its SourceRef) so this
-                // registration-time error keeps the "every error carries file and path" promise;
-                // fall back to the id only if the source is somehow unknown.
-                val src = result.sourceOf(spec.id)
-                errors += if (src != null) {
-                    ValidationError.at(src.file(), src.path().ifEmpty { spec.id.toString() }, "unknown material '${spec.material}'")
-                } else {
-                    ValidationError.at(spec.id.toString(), spec.material, "unknown material '${spec.material}'")
-                }
+                errors += error(result, spec.id, "unknown material '${spec.material}'")
             } else {
                 items.register(owner, buildItem(spec, material))
             }
         }
+
+        // WP-3.1d: stations FIRST (recipes reference a station), then recipes. Both resolve their single
+        // Bukkit dependency (raw material names) here on the server, exactly like [buildItem] does for an
+        // item's `material`, aggregating an "unknown material" error rather than throwing.
+        result.stations.forEach { spec -> registerStation(spec, owner, result, errors) }
+        result.recipes.forEach { spec -> registerRecipe(spec, owner, result, errors) }
+
         return errors
+    }
+
+    /**
+     * Resolves a [StationSpec] into a live [Station] and registers it. `blocks` -> [BlockMatchers.ofMaterials]
+     * (unknown material aggregated, like [buildItem]); `rows` + `name` -> a RamCore [dev.willram.ramcore.menu.MenuView]
+     * via [Menus.menu]. Any build failure (e.g. an out-of-range `rows`) aggregates as a source-tagged error.
+     */
+    private fun registerStation(
+        spec: StationSpec,
+        owner: String,
+        result: RpgContentLoadResult,
+        errors: MutableList<ValidationError>,
+    ) {
+        val (materials, unknown) = resolveMaterials(spec.blockMaterials)
+        if (unknown.isNotEmpty()) {
+            errors += error(result, spec.id, "unknown block material(s) ${unknown.joinToString(", ")}")
+            return
+        }
+        val station = runCatching {
+            Station(
+                key = spec.key,
+                displayName = spec.displayName,
+                blockMatcher = BlockMatchers.ofMaterials(*materials.toTypedArray()),
+                // rows + name -> a RamCore MenuView (rule 1: reuse Menus, never hand-roll a menu). The
+                // station GUI itself is rebuilt live by StationMenu from this view's row count + title.
+                menuLayout = Menus.menu(spec.displayName, spec.rows).build(),
+                permittedKinds = spec.permittedKinds,
+            )
+        }.getOrElse { ex ->
+            errors += error(result, spec.id, "invalid station: ${ex.message}")
+            return
+        }
+        runCatching { stations.register(owner, station) }
+            .onFailure { errors += error(result, spec.id, "could not register station: ${it.message}") }
+    }
+
+    /**
+     * Resolves a [RecipeSpec] into a live [Recipe] and registers it. Resolves each ingredient (material
+     * names -> `Set<Material>`, unknowns aggregated) and validates every referenced id resolves against a
+     * LIVE registry: the station exists, a `new_item`/`transmute` output [ItemDefinition] exists, a
+     * `reforge` key is registered, an `insert_gem` gem is registered. Any failure aggregates a
+     * source-tagged error and the recipe is skipped rather than registered half-resolved.
+     */
+    private fun registerRecipe(
+        spec: RecipeSpec,
+        owner: String,
+        result: RpgContentLoadResult,
+        errors: MutableList<ValidationError>,
+    ) {
+        val before = errors.size
+
+        val ingredients = spec.inputs.map { input -> resolveIngredient(input, spec.id, result, errors) }
+
+        if (stations.get(spec.station) == null) {
+            errors += error(result, spec.id, "recipe references unknown station '${spec.station}'")
+        }
+        when (val outcome = spec.outcome) {
+            is RecipeOutcome.NewItem ->
+                if (items.get(outcome.output) == null) {
+                    errors += error(result, spec.id, "recipe outputs unknown item '${outcome.output}'")
+                }
+            is RecipeOutcome.Transmute ->
+                if (items.get(outcome.target) == null) {
+                    errors += error(result, spec.id, "recipe transmutes to unknown item '${outcome.target}'")
+                }
+            is RecipeOutcome.Reforge ->
+                if (reforges.get(outcome.reforge) == null) {
+                    errors += error(result, spec.id, "recipe references unknown reforge '${outcome.reforge}'")
+                }
+            is RecipeOutcome.InsertGem ->
+                if (gems.get(outcome.gem) == null) {
+                    errors += error(result, spec.id, "recipe references unknown gem '${outcome.gem}'")
+                }
+            else -> Unit
+        }
+
+        // Any ingredient or reference error means the recipe is not safe to register -- skip it (errors
+        // already aggregated above), never register a half-resolved recipe.
+        if (errors.size != before) return
+
+        val recipe = Recipe(
+            key = spec.key,
+            station = spec.station,
+            inputs = ingredients.filterNotNull(),
+            requirements = spec.requirements,
+            cost = spec.cost,
+            outcome = spec.outcome,
+        )
+        runCatching { recipes.register(owner, recipe) }
+            .onFailure { errors += error(result, spec.id, "could not register recipe: ${it.message}") }
+    }
+
+    /** Resolves one raw [RecipeIngredientSpec] into a live [Ingredient]; unknown materials aggregate. */
+    private fun resolveIngredient(
+        input: RecipeIngredientSpec,
+        recipeId: ContentId,
+        result: RpgContentLoadResult,
+        errors: MutableList<ValidationError>,
+    ): Ingredient? = when (input.kind) {
+        RecipeIngredientKind.ITEM -> Ingredient.Item(input.itemKey!!, input.count)
+        RecipeIngredientKind.CATEGORY -> Ingredient.Category(input.category!!, input.count)
+        RecipeIngredientKind.PREDICATE -> Ingredient.Predicate(
+            itemKey = input.itemKey,
+            category = input.category,
+            minQuality = input.minQuality,
+            minUpgradeLevel = input.minUpgradeLevel,
+            count = input.count,
+        )
+        RecipeIngredientKind.MATERIAL -> {
+            val (materials, unknown) = resolveMaterials(input.materials)
+            if (unknown.isNotEmpty()) {
+                errors += error(result, recipeId, "recipe ingredient has unknown material(s) ${unknown.joinToString(", ")}")
+                null
+            } else {
+                Ingredient.MaterialTag(materials.toSet(), input.count)
+            }
+        }
+    }
+
+    /** Splits raw material names into resolved [Material]s and the names that did not resolve. */
+    private fun resolveMaterials(names: Collection<String>): Pair<List<Material>, List<String>> {
+        val resolved = ArrayList<Material>(names.size)
+        val unknown = ArrayList<String>()
+        for (name in names) {
+            val material = runCatching { Material.valueOf(name) }.getOrNull()
+            if (material == null) unknown += name else resolved += material
+        }
+        return resolved to unknown
+    }
+
+    /**
+     * A source-tagged registration-time [ValidationError] for [id]. Cites the file + path the loader kept
+     * for the definition, falling back to the id when the source is somehow unknown -- keeping the "every
+     * error carries file and path" promise the same way the item-material seam does.
+     */
+    private fun error(result: RpgContentLoadResult, id: ContentId, message: String): ValidationError {
+        val src = result.sourceOf(id)
+        return if (src != null) {
+            ValidationError.at(src.file(), src.path().ifEmpty { id.toString() }, message)
+        } else {
+            ValidationError.at(id.toString(), "", message)
+        }
     }
 
     companion object {

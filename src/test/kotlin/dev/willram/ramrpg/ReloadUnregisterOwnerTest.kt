@@ -178,6 +178,10 @@ class ReloadUnregisterOwnerTest {
             entities = entities,
             reforges = reforges,
             gems = gems,
+            // WP-3.1d: real in-memory impls (pure). This test's confs carry no recipes/stations, so these
+            // stay empty here; the dedicated CraftingContentPipelineTest covers their reload unregister.
+            recipes = dev.willram.ramrpg.core.services.RecipeRegistryImpl(),
+            stations = dev.willram.ramrpg.core.services.StationRegistryImpl(),
         )
 
         val beforeResult = RpgContentLoader.load(before)
@@ -195,6 +199,8 @@ class ReloadUnregisterOwnerTest {
         val afterResult = RpgContentLoader.load(after)
         val reloadErrors = ContentModule.applyToRegistries(
             registrar, afterResult, items, skills, enchants, entities, reforges, gems,
+            dev.willram.ramrpg.core.services.RecipeRegistryImpl(),
+            dev.willram.ramrpg.core.services.StationRegistryImpl(),
         )
         assertTrue(reloadErrors.isEmpty(), "reload should be clean: $reloadErrors")
 
