@@ -20,6 +20,14 @@ import dev.willram.ramrpg.core.listeners.requirementStateFor
 /**
  * WP-2.1c: [data]'s socketed-gem contribution, or empty when [def] is known and [isInert] against
  * [state]. [def] is nullable for the same structural reason as [enchantmentStatsFor] -- see its KDoc.
+ *
+ * WP-3.3d: this is the SINGLE stat path for socketed gems and its output depends ONLY on which gems
+ * occupy [data]'s sockets. The three socket crafting operations (add_socket / insert_gem / remove_gem)
+ * merely change that occupancy via [dev.willram.ramrpg.api.crafting.RecipeOutcome.plan] -- cutting an
+ * empty slot contributes nothing, inserting a gem makes this method emit exactly that gem's
+ * [dev.willram.ramrpg.api.sockets.GemDefinition.statContribution], and removing it withdraws exactly
+ * that again. There is no bespoke socket-crafting stat path: an already-set gem produces byte-identical
+ * modifiers here regardless of how it came to be set (drop, `/skills give`, or a WP-3.3d craft).
  */
 internal fun socketStatsFor(
     def: ItemDefinition?,

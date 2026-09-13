@@ -40,6 +40,7 @@ damage pipeline, and the dataVersion ledger.
 - [3.1a — Station and recipe model; quality roll formula; critical-craft chance](design/3.1a-crafting-model.md)
 - [3.1c — Crafting XP rates](design/3.1c-crafting-xp.md)
 - [3.2a — Material tier ladder](design/3.2a-material-tiers.md)
+- [3.3d — Socket slot caps and gem costs](design/3.3d-socket-costs.md)
 
 ## Phase 5
 
