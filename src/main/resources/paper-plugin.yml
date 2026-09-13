@@ -27,3 +27,19 @@ dependencies:
       required: false
       # This means that your plugin will not have access to their classpath
       join-classpath: true
+permissions:
+  ramrpg.admin:
+    description: Allows use of RamRPG admin skill commands (/skills reload, reset, give).
+    default: op
+  ramrpg.command.admin:
+    description: Umbrella permission granting all RamRPG /rpg admin commands.
+    default: op
+    children:
+      ramrpg.command.reload: true
+      ramrpg.command.validate: true
+  ramrpg.command.reload:
+    description: Allows use of /rpg reload to rebuild content registries.
+    default: op
+  ramrpg.command.validate:
+    description: Allows use of /rpg validate to check content for errors.
+    default: op
