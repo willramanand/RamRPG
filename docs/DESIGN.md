@@ -23,6 +23,10 @@ damage pipeline, and the dataVersion ledger.
 - [1.5b — Effect schema, builtin action/condition/matcher ids](design/1.5b-effect-schema.md)
 - [1.5c — Reload semantics and what is not hot-swappable](design/1.5c-reload-semantics.md)
 - [1.6a — HUD composition order and slot budget](design/1.6a-hud-composition.md)
+
+## Phase 2
+
+- [2.1a — Item level bands and requirement gates](design/2.1a-item-level-requirements.md)
 - [1.7b — Service graph, module seams and construction order](design/1.7b-service-graph.md)
 
 ## Phase 0 baseline
