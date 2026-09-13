@@ -7,9 +7,7 @@ package dev.willram.ramrpg.core.config
 
 import dev.willram.ramcore.content.ContentId
 import dev.willram.ramcore.data.DataItem
-import dev.willram.ramcore.data.FileDataRepository
-import dev.willram.ramcore.data.Repositories
-import dev.willram.ramcore.scheduler.Schedulers
+import dev.willram.ramcore.gson.GsonProvider
 import dev.willram.ramrpg.api.effects.Effect
 import dev.willram.ramrpg.api.effects.ScalingFormula
 import dev.willram.ramrpg.api.effects.StatEffect
@@ -35,6 +33,8 @@ import dev.willram.ramrpg.api.stats.SourceType
 import dev.willram.ramrpg.api.stats.StatDefinition
 import dev.willram.ramrpg.api.stats.StatModifier
 import dev.willram.ramrpg.api.stats.StatService
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
 private const val OWNER = "ramrpg-override"
@@ -126,17 +126,25 @@ class ContentOverrideLoader(private val baseDir: Path) {
         enchants?.let { applyEnchantOverrides(it) }
     }
 
-    private inline fun <reified V : DataItem> openRepo(sub: String): FileDataRepository<String, V>? {
-        val dir = baseDir.resolve(sub)
-        if (!dir.toFile().isDirectory) return null
-        val repo = Repositories.jsonByString(dir, V::class.java) { r -> Schedulers.runAsync(r) }
-        repo.setup()
-        return repo
+    // Loads every <id>.json override file in a subdirectory, keyed by the URL-decoded file name (the
+    // same encoding DataKeyCodec.stringKeys uses). Parsing is synchronous with RamCore's Gson so this
+    // startup step neither blocks on the scheduler nor needs one under test. This is a temporary
+    // JSON-patch path; WP-1.5a replaces it with the HOCON ContentLoader.
+    private inline fun <reified V : DataItem> openRepo(sub: String): Map<String, V>? {
+        val dir = baseDir.resolve(sub).toFile()
+        if (!dir.isDirectory) return null
+        val gson = GsonProvider.standard()
+        val out = LinkedHashMap<String, V>()
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.forEach { file ->
+            val key = URLDecoder.decode(file.name.removeSuffix(".json"), StandardCharsets.UTF_8)
+            file.reader().use { reader -> gson.fromJson(reader, V::class.java)?.let { out[key] = it } }
+        }
+        return out
     }
 
     private fun applyStatOverrides(stats: StatService) {
         val repo = openRepo<StatOverride>("stats") ?: return
-        for ((idStr, ov) in repo.registry()) {
+        for ((idStr, ov) in repo) {
             val cid = parseId(idStr) ?: continue
             val current = stats.definition(StatKey(cid)) ?: continue
             stats.registerDefinition(current.copy(
@@ -146,12 +154,11 @@ class ContentOverrideLoader(private val baseDir: Path) {
                 max = ov.max ?: current.max,
             ))
         }
-        repo.close()
     }
 
     private fun applyItemOverrides(items: ItemDefinitionRegistry) {
         val repo = openRepo<ItemOverride>("items") ?: return
-        for ((idStr, ov) in repo.registry()) {
+        for ((idStr, ov) in repo) {
             val cid = parseId(idStr) ?: continue
             val current = items.get(ItemKey(cid)) ?: continue
             val newStats = if (ov.baseStats.isEmpty()) current.baseStats
@@ -168,12 +175,11 @@ class ContentOverrideLoader(private val baseDir: Path) {
                 allowVanillaWrapper = ov.allowVanillaWrapper ?: current.allowVanillaWrapper,
             ))
         }
-        repo.close()
     }
 
     private fun applySkillOverrides(skills: SkillRegistry) {
         val repo = openRepo<SkillOverride>("skills") ?: return
-        for ((idStr, ov) in repo.registry()) {
+        for ((idStr, ov) in repo) {
             val cid = parseId(idStr) ?: continue
             val current = skills.get(SkillKey(cid)) ?: continue
             val curve = if (ov.xpBase != null || ov.xpMul != null)
@@ -189,12 +195,11 @@ class ContentOverrideLoader(private val baseDir: Path) {
                 barColor = current.barColor,
             ))
         }
-        repo.close()
     }
 
     private fun applyEntityOverrides(entities: EntityProfileRegistry) {
         val repo = openRepo<EntityOverride>("entities") ?: return
-        for ((idStr, ov) in repo.registry()) {
+        for ((idStr, ov) in repo) {
             val cid = parseId(idStr) ?: continue
             val current = entities.get(EntityProfileKey(cid)) ?: continue
             val newStats = if (ov.baseStats.isEmpty()) current.baseStats
@@ -223,17 +228,15 @@ class ContentOverrideLoader(private val baseDir: Path) {
                 displayName = current.displayName,
             ))
         }
-        repo.close()
     }
 
     private fun applyEnchantOverrides(reg: EnchantmentRegistry) {
         val repo = openRepo<EnchantOverride>("enchants") ?: return
-        for ((idStr, ov) in repo.registry()) {
+        for ((idStr, ov) in repo) {
             val cid = parseId(idStr) ?: continue
             val current = reg.get(EnchantmentKey(cid)) ?: continue
             reg.register(OWNER, OverrideEnchantment(current, ov.maxLevel, ov.statScale))
         }
-        repo.close()
     }
 
     private fun parseId(s: String): ContentId? = runCatching { ContentId.parse(s) }.getOrNull()

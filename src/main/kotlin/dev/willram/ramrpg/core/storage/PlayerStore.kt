@@ -30,6 +30,28 @@ class PlayerRpgData : DataItem() {
     fun getXp(key: SkillKey): Double = skillXp.getOrDefault(key.id.toString(), 0.0)
     fun setLevel(key: SkillKey, lvl: Int) { skillLevels[key.id.toString()] = lvl; markDirty() }
     fun setXp(key: SkillKey, xp: Double) { skillXp[key.id.toString()] = xp; markDirty() }
+
+    /**
+     * Deep copy for [dev.willram.ramcore.playerdata.PlayerDataKey]'s snapshot hook. PlayerDataService
+     * calls this on the player's own thread right before handing the value to the async writer, so the
+     * writer never serialises a value that gameplay is still mutating. Every mutable collection and
+     * scalar is copied; [dataVersion] carries so the store envelope keeps the right version. Extend
+     * this the same way when a later dataVersion bump adds fields (v2 quests, v3 buffs, v4 perks).
+     */
+    fun snapshot(): PlayerRpgData {
+        val copy = PlayerRpgData()
+        copy.skillLevels.putAll(this.skillLevels)
+        copy.skillXp.putAll(this.skillXp)
+        copy.questProgress.putAll(this.questProgress)
+        copy.questCompleted.addAll(this.questCompleted)
+        copy.disabledAbilities.addAll(this.disabledAbilities)
+        copy.currentMana = this.currentMana
+        copy.maxManaCache = this.maxManaCache
+        copy.lastActiveSkillId = this.lastActiveSkillId
+        copy.lastDailyReset = this.lastDailyReset
+        copy.dataVersion(this.dataVersion())
+        return copy
+    }
 }
 
 interface PlayerStore {

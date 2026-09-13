@@ -1,6 +1,12 @@
 package dev.willram.ramrpg
 
 import dev.willram.ramcore.RamPlugin
+import dev.willram.ramcore.data.DataKeyCodec
+import dev.willram.ramcore.playerdata.PlayerDataOptions
+import dev.willram.ramcore.playerdata.PlayerDataService
+import dev.willram.ramcore.store.StoreCodec
+import dev.willram.ramcore.store.StoreMigrations
+import dev.willram.ramcore.store.Stores
 import dev.willram.ramrpg.api.abilities.AbilityRegistry
 import dev.willram.ramrpg.api.abilities.AbilityService
 import dev.willram.ramrpg.api.combat.DamagePipeline
@@ -49,7 +55,6 @@ import dev.willram.ramrpg.core.listeners.LootListener
 import dev.willram.ramrpg.core.listeners.ManaRegen
 import dev.willram.ramrpg.core.listeners.MythicIntegration
 import dev.willram.ramrpg.core.listeners.NonCombatXpListener
-import dev.willram.ramrpg.core.listeners.PlayerStoreListener
 import dev.willram.ramrpg.core.listeners.SkillsCommand
 import dev.willram.ramrpg.core.listeners.XpListener
 import dev.willram.ramrpg.core.platform.PlatformScheduler
@@ -75,6 +80,7 @@ import dev.willram.ramrpg.core.services.SkillStatProvider
 import dev.willram.ramrpg.core.services.SocketStatProvider
 import dev.willram.ramrpg.core.services.StatServiceImpl
 import dev.willram.ramrpg.core.storage.FilePlayerStore
+import dev.willram.ramrpg.core.storage.PlayerRpgData
 import dev.willram.ramrpg.core.storage.PlayerStore
 import io.papermc.paper.command.brigadier.Commands
 import net.kyori.adventure.text.Component
@@ -121,15 +127,29 @@ class RamRPG : RamPlugin() {
 
     override fun load() {
         mythicMobsEnabled = server.pluginManager.getPlugin("MythicMobs") != null
+
+        // Per-player persistence on RamCore's PlayerDataService (Stores API). Installed and keyed from
+        // load() because the service registry refuses registrations after load. The store is
+        // migration-capable from day one; the dataVersion ledger (docs/design/F5-dataversion-ledger.md)
+        // starts at v1 and later WPs append v2 (quests), v3 (buffs), v4 (perks) to this chain.
+        val playerData = PlayerDataService.install(this, PlayerDataOptions.defaults())
+        val storeDir = File(dataFolder, "playerdata")
+        if (!storeDir.exists()) storeDir.mkdirs()
+        val store = Stores.cached(
+            Stores.file(
+                storeDir.toPath(),
+                DataKeyCodec.uuidKeys(),
+                StoreCodec.gson(PlayerRpgData::class.java),
+                StoreMigrations.start<PlayerRpgData>(),
+            ),
+        )
+        playerData.register(FilePlayerStore.RPG_KEY, store)
+        playerStore = FilePlayerStore(playerData)
     }
 
     override fun enable() {
         Translations.load(this)
         platform = RamCorePlatformScheduler()
-        val storeDir = File(dataFolder, "playerdata")
-        if (!storeDir.exists()) storeDir.mkdirs()
-        val fileStore = FilePlayerStore(storeDir.toPath())
-        playerStore = fileStore
 
         stats = StatServiceImpl()
         skillRegistry = SkillRegistryImpl()
@@ -162,7 +182,7 @@ class RamRPG : RamPlugin() {
         applyContentOverrides()
         registerStatProviders()
         registerDamageStages()
-        registerListeners(fileStore)
+        registerListeners()
 
         skillsCommand = SkillsCommand(skillRegistry, skillService, stats, enchantments, itemInstances, itemDefs, reforges, gems, playerStore, abilities, abilityService)
 
@@ -174,11 +194,8 @@ class RamRPG : RamPlugin() {
         if (::manaRegen.isInitialized) manaRegen.shutdown()
         if (::actionBarUi.isInitialized) actionBarUi.shutdown()
         if (::bossBarUi.isInitialized) bossBarUi.shutdown()
-        if (::playerStore.isInitialized) {
-            val store = playerStore as? FilePlayerStore
-            store?.saveAll()
-            store?.close()
-        }
+        // PlayerDataService is bound to this plugin's lifecycle (installed in load()); it flushes every
+        // online player's data inline on disable, so there is no store to save or close here.
     }
 
     @Suppress("UnstableApiUsage")
@@ -240,8 +257,7 @@ class RamRPG : RamPlugin() {
         damagePipeline.register(ApplyStage())
     }
 
-    private fun registerListeners(fileStore: FilePlayerStore) {
-        PlayerStoreListener(fileStore).register()
+    private fun registerListeners() {
         equipmentListener = EquipmentListener(stats).also { it.register() }
         CombatListener(damagePipeline).register()
         economy = EconomyService()
