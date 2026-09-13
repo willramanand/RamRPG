@@ -4,6 +4,7 @@ package dev.willram.ramrpg.builtin.stats
 import dev.willram.ramrpg.api.stats.StatDefinition
 import dev.willram.ramrpg.api.stats.StatFormat
 import dev.willram.ramrpg.api.stats.StatService
+import dev.willram.ramrpg.builtin.identity.BuiltinDamageTypes
 import dev.willram.ramrpg.builtin.identity.RamStats
 import net.kyori.adventure.text.Component
 import dev.willram.ramrpg.api.identity.StatKey
@@ -32,5 +33,15 @@ object BuiltinStats {
         reg(RamStats.LIFESTEAL, "Lifesteal", "♥", NamedTextColor.DARK_RED, min = 0.0, fmt = StatFormat.PERCENT)
         reg(RamStats.FORTUNE, "Fortune", "☘", NamedTextColor.GOLD, min = 0.0)
         reg(RamStats.WISDOM, "Wisdom", "✎", NamedTextColor.AQUA, base = 100.0, min = 0.0)
+
+        // WP-2.3a: one resistance_<type> stat per builtin damage type (registered even for `true`,
+        // which ResistancesStage deliberately never reads -- see BuiltinDamageTypes.resistanceStat).
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.PHYSICAL), "Physical Resistance", "❈", NamedTextColor.GRAY, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.FIRE), "Fire Resistance", "♨", NamedTextColor.GOLD, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.FROST), "Frost Resistance", "❆", NamedTextColor.AQUA, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.LIGHTNING), "Lightning Resistance", "⚡", NamedTextColor.YELLOW, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.ARCANE), "Arcane Resistance", "✵", NamedTextColor.LIGHT_PURPLE, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.POISON), "Poison Resistance", "⚗", NamedTextColor.DARK_GREEN, min = 0.0)
+        reg(BuiltinDamageTypes.resistanceStat(BuiltinDamageTypes.TRUE), "True Resistance", "✧", NamedTextColor.WHITE, min = 0.0)
     }
 }
