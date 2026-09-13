@@ -120,7 +120,39 @@ data class ItemInstanceData(
     val enchantments: Map<EnchantmentKey, Int> = emptyMap(),
     val owner: UUID? = null,
     val customName: String? = null,
-)
+    /**
+     * WP-2.1b: instance quality in `[0.0, 1.0]` -- how good this particular roll of the item is.
+     * Scales a stat roll's effective value within its `[min, max]` band (see
+     * `ItemInstanceServiceImpl.qualityScaledRoll` and `docs/design/2.1b-quality-durability.md`).
+     * Defaults to [DEFAULT_QUALITY] (0.5, the mid band) for drops; crafting (a later WP) sets it from
+     * the crafter's skill. Values outside `[0,1]` are the caller's responsibility to keep sane.
+     */
+    val quality: Double = DEFAULT_QUALITY,
+    /** WP-2.1b: the crafter's UUID, or `null` for drops / world-generated items. Set later by the crafting WP. */
+    val craftedBy: UUID? = null,
+    /**
+     * WP-2.1b: this instance's durability ceiling. No definition-side field seeds it yet, so [create]
+     * uses [DEFAULT_MAX_DURABILITY]; the number is a placeholder tuned in WP-2.2.
+     */
+    val maxDurability: Int = DEFAULT_MAX_DURABILITY,
+    /**
+     * WP-2.1b: current durability. Defaults to [maxDurability] (full). The DRAIN-on-use behaviour and
+     * inert-at-0 handling are WP-2.2 / WP-2.1c -- this WP only carries the number.
+     */
+    val durability: Int = maxDurability,
+) {
+    companion object {
+        /** WP-2.1b: default instance quality (mid band) for drops and un-crafted items. */
+        const val DEFAULT_QUALITY: Double = 0.5
+
+        /**
+         * WP-2.1b: fallback durability ceiling used when no definition-side durability seeds an instance.
+         * A placeholder in the spirit of the 0.1 power curve -- WP-2.2 tunes the real numbers alongside
+         * drain rates. See `docs/design/2.1b-quality-durability.md`.
+         */
+        const val DEFAULT_MAX_DURABILITY: Int = 500
+    }
+}
 
 data class ItemInstanceInit(
     val upgradeLevel: Int = 0,
@@ -132,6 +164,13 @@ data class ItemInstanceInit(
     val assignInstanceId: Boolean = true,
     /** When set, deterministic seed for [ItemDefinition.statRolls]. */
     val rollSeed: Long? = null,
+    /**
+     * WP-2.1b: when non-null, quality DETERMINISTICALLY positions each [ItemDefinition.statRolls] roll
+     * within its `[min, max]` band (`min + quality*(max-min)`) instead of the RNG/[rollSeed] path, and is
+     * stored as [ItemInstanceData.quality]. Null (the default) keeps the existing RNG/seed roll and the
+     * default quality -- so every current caller (loot, `/skills give`) is unchanged. Coerced into `[0,1]`.
+     */
+    val quality: Double? = null,
 )
 
 data class LoreContext(
@@ -316,4 +355,11 @@ interface ItemInstanceService {
     fun write(item: ItemStack, data: ItemInstanceData): ItemStack
 }
 
-object ItemSchema { const val CURRENT = 1 }
+/**
+ * The current [ItemInstanceData] PDC schema version. WP-2.1b bumped this 1 -> 2 for the quality,
+ * craftedBy and durability/maxDurability fields (the single Phase-2 instance-schema bump; see rule 5 and
+ * `docs/design/2.1b-quality-durability.md`). Per the fresh-server / no-migration policy there is no
+ * V1->V2 migration engine: a v1 DTO simply omits the new JSON fields and they fill from the schema
+ * defaults on read (see `ItemInstanceServiceImpl.ItemDto.toDomain`).
+ */
+object ItemSchema { const val CURRENT = 2 }
